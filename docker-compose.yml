@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: leadflow
+      POSTGRES_USER: leadflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leadflow -d leadflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      ENVIRONMENT: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
