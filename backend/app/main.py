@@ -32,7 +32,7 @@ def ready():
     try:
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if revision != "0003":
+        if revision != "0004":
             return JSONResponse({"status": "migration_required"}, status_code=503)
     except SQLAlchemyError:
         return JSONResponse({"status": "database_unavailable"}, status_code=503)

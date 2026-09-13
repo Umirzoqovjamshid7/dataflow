@@ -37,7 +37,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Host Nginx 443 portida HTTPSni qabul qiladi va serverning ichki `127.0.0.1:8080` portiga uzatadi. Bu development server emas; frontendning Nginx konteyneriga yopiq ingress portidir. Backend/database portlarini internetga ochmang. Refresh cookie productionda Secure va HttpOnly bo'ladi.
+Host Nginx 443 portida HTTPSni qabul qiladi va serverning ichki `127.0.0.1:8081` portiga uzatadi. Bu development server emas; frontendning Nginx konteyneriga yopiq ingress portidir. Backend/database portlarini internetga ochmang. Refresh cookie productionda Secure va HttpOnly bo'ladi.
 
 Frontend API manzili `/api-proxy`; alohida frontend API domenini kiritish shart emas.
 

@@ -51,6 +51,18 @@ def test_public_lead_validation(fixture):
     assert client.post("/api/leads/public", json={**body, "tenant_id": 2}).status_code == 422
     assert client.post("/api/leads/public", json={**body, "phone": "x"}).status_code == 422
 
+
+def test_public_lead_idempotency(fixture):
+    client, _, _, _ = fixture
+    body = {"tenant_slug": "a", "name": "Retry Customer", "phone": "+998901234568"}
+    headers = {"Idempotency-Key": "lead-retry-0001"}
+    first = client.post("/api/leads/public", json=body, headers=headers)
+    second = client.post("/api/leads/public", json=body, headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["duplicate"] is True
+    assert second.json()["lead_id"] == first.json()["lead_id"]
+
 def test_password_hash_and_secret_policy():
     hashed = hash_password("test-password")
     assert hashed.startswith("$argon2")
