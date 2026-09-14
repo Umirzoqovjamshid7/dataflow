@@ -63,7 +63,6 @@ function App() {
   const role = user?.role;
   const visiblePage = page === "admin" && role !== "super_admin" ? "dashboard" : page === "team" && role !== "tenant_admin" ? "dashboard" : page;
   useEffect(() => {
-    localStorage.removeItem("token"); localStorage.removeItem("role");
     restoreSession().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
     const expired = () => setUser(null);
     const popstate = () => setPage(pageFromPath(window.location.pathname));
