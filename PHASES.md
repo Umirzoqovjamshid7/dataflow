@@ -24,7 +24,24 @@ Found and fixed during testing: SQLite returned naive refresh timestamps, causin
 
 Created: root `.env.example`, `ARCHITECTURE.md`, `SECURITY.md`, `DEPLOYMENT.md`, `REMAINING_ISSUES.md`, backend/frontend `.dockerignore`, `frontend/nginx.conf`.
 
-Modified: README, Compose, both Dockerfiles, backend environment example. Removed embedded credentials, preserved the original database service/volume, required environment configuration, added readiness checks, included Alembic in the image, used a non-root backend process and switched frontend deployment to static Nginx. These supporting fixes do not complete phase 10.
+Modified: README, Compose, both Dockerfiles, backend environment example. Removed embedded credentials, preserved the original database service/volume, required environment configuration, added readiness checks, included Alembic in the image, used a non-root backend process and switched frontend deployment to static Nginx. These supporting fixes do not complete phase 10. The frontend `dev` and `preview` scripts remain available for local maintenance; only development startup guidance was removed from the deployment documentation.
+
+## Documentation and security corrections — 2026-09-15
+
+- Added migration `0004_lead_idempotency.py` to the Phase 2 ledger. It adds a tenant-scoped unique `Idempotency-Key` for safe public lead retries, including a concurrent-insert conflict path.
+- Removed Telegram credentials from browser `localStorage`. The Settings screen now keeps entered values in memory only and reports that the server integration is not connected. Telegram persistence must be implemented through the encrypted backend integration before this screen can be production-ready.
+- Reconciled the deployment note with `frontend/package.json`: the local Vite scripts are present, while production deployment still uses the built static bundle and Nginx.
+
+## Current verification — 2026-09-15
+
+- `cd frontend; npm.cmd run build`: **passed** (Vite 6.4.3; no build error).
+- Backend pytest: **not runnable in the current environment** because no Python interpreter is installed/discoverable. The historical result of 13 passed tests remains evidence for the previous increment, not a new verification result.
+- PostgreSQL, Docker runtime, browser QA and provider sandbox checks remain open as listed in `REMAINING_ISSUES.md`.
+
+## Analytics improvement — 2026-09-15
+
+- Added `daily_activity` to `/api/analytics/summary`. It aggregates campaign impressions and clicks by campaign date and returns a calculated daily CTR.
+- The dashboard uses the API’s daily series in non-demo mode and only uses sample values in local demo mode. Empty production data now renders a safe zero-state instead of silently showing sample traffic.
 
 ## Final verification of this increment — 2026-09-12
 

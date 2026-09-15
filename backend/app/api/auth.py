@@ -18,8 +18,11 @@ DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
 
 @router.post("/login")
 def login(data: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
-    limit(db, request, "login", maximum=10)
-    user = db.query(User).filter(User.email == data.email).first()
+    trusted_origin(request)
+    email = str(data.email).strip().lower()
+    limit(db, request, "login-ip", maximum=30)
+    limit(db, request, "login-account", maximum=10, identity=email)
+    user = db.query(User).filter(User.email == email).first()
     password_ok = verify_password(data.password, user.password_hash if user else DUMMY_HASH)
     if not user or not password_ok or not user.active:
         audit(db, request, "failed_login")
@@ -28,7 +31,9 @@ def login(data: LoginIn, request: Request, response: Response, db: Session = Dep
     if user.role != "super_admin":
         tenant = db.get(Tenant, user.tenant_id) if user.tenant_id else None
         if not tenant or not tenant.active:
-            raise HTTPException(403, "Company disabled")
+            audit(db, request, "failed_login", user)
+            db.commit()
+            raise HTTPException(401, "Invalid credentials")
     issue_refresh(db, response, user)
     audit(db, request, "login", user)
     db.commit()

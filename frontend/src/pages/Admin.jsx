@@ -3,7 +3,7 @@ import {request} from "../api";
 import Team from "./Team";
 import Kpi from "../components/Kpi";
 
-export default function Admin() {
+export default function Admin({t}) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -33,35 +33,35 @@ export default function Admin() {
 
   return <div>
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="page-head"><div><h1>Super Admin</h1><p>All SaaS customers in one place</p></div></div>
+    <div className="page-head"><div><h1>{t.superAdmin}</h1><p>{t.allCustomers}</p></div></div>
     {summary && <div className="kpis">{Object.entries(summary).filter(([key]) => key !== "metric_source").map(([key, value]) => <Kpi key={key} label={key.replaceAll("_", " ")} value={value}/>)}</div>}
-    {selected && <><button onClick={() => setSelected(null)}>Close team</button><Team tenantId={selected}/></>}
+    {selected && <><button onClick={() => setSelected(null)}>{t.closeTeam}</button><Team tenantId={selected} t={t}/></>}
 
     <section className="panel">
-      <h2>Create client</h2>
+      <h2>{t.createClient}</h2>
       <form className="inline-form" onSubmit={createTenant}>
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder="Company name" required/>
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder={t.companyName} required/>
         <input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="company-slug" required/>
-        <button disabled={busy}>{busy ? "Creating…" : "Create"}</button>
+        <button disabled={busy}>{busy ? t.loading : t.create}</button>
       </form>
     </section>
 
     <section className="panel">
-      <h2>Clients</h2>
+      <h2>{t.clients}</h2>
       <div className="tenant-grid">
-        {tenants.map(t=><div className="tenant-card" key={t.id}>
-          <div><strong>{t.name}</strong><small>/{t.slug}</small></div>
+        {tenants.map(tenant=><div className="tenant-card" key={tenant.id}>
+          <div><strong>{tenant.name}</strong><small>/{tenant.slug}</small></div>
           <div className="tenant-stats">
-            <span>Users <b>{t.users}</b></span>
-            <span>Leads <b>{t.leads}</b></span>
+            <span>{t.users} <b>{tenant.users}</b></span>
+            <span>{t.leads} <b>{tenant.leads}</b></span>
           </div>
-          <span className={t.active ? "status on" : "status"}>{t.active ? "Active" : "Disabled"}</span>
-          <button onClick={() => setSelected(t.id)}>Manage team</button>
+          <span className={tenant.active ? "status on" : "status"}>{tenant.active ? t.active : t.disabled}</span>
+          <button onClick={() => setSelected(tenant.id)}>{t.manageTeam}</button>
           <button onClick={async () => {
-            if (!window.confirm(`${t.active ? "Disable" : "Activate"} ${t.name}?`)) return;
-            try { await request(`/api/admin/tenants/${t.id}`, {method: "PATCH", body: JSON.stringify({active: !t.active})}); load(); }
+            if (!window.confirm(`${tenant.active ? "Disable" : "Activate"} ${tenant.name}?`)) return;
+            try { await request(`/api/admin/tenants/${tenant.id}`, {method: "PATCH", body: JSON.stringify({active: !tenant.active})}); load(); }
             catch (e) { setError(e.message); }
-          }}>{t.active ? "Disable" : "Activate"}</button>
+          }}>{tenant.active ? t.disabled : t.active}</button>
         </div>)}
       </div>
     </section>

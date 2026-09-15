@@ -13,6 +13,8 @@ This is a hardened foundation, **not a production security certification**. See 
 - Shared database rate limits on login, refresh and public leads. CORS whitelist, strict refresh-cookie policy and origin checks on refresh/logout.
 - Audit for successful/failed credential login, company creation/activation/disable, user creation/activation/disable and role changes. Passwords/tokens are not audit payloads.
 - Nginx CSP/frame/content-type headers, bounded request bodies and no public database/backend port in Compose.
+- Production FastAPI schema endpoints are disabled; CORS methods/headers are allowlisted; HSTS and Permissions-Policy are emitted by the API in production.
+- Login has independent per-IP and per-account throttles and validates browser origins. Demo login requires an explicit opt-in environment flag.
 
 ## Operational requirements
 

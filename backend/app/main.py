@@ -9,14 +9,20 @@ from app.api.auth import router as auth_router
 from app.api.leads import router as leads_router
 from app.api.admin import router as admin_router
 
-app = FastAPI(title="LeadFlow SaaS API", version="0.1.0")
+app = FastAPI(
+    title="LeadFlow SaaS API",
+    version="0.1.0",
+    docs_url=None if settings.ENVIRONMENT == "production" else "/docs",
+    redoc_url=None if settings.ENVIRONMENT == "production" else "/redoc",
+    openapi_url=None if settings.ENVIRONMENT == "production" else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.CORS_ORIGINS.split(",")],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 
 app.include_router(auth_router)
@@ -45,4 +51,7 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = "no-store"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response

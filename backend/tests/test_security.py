@@ -25,7 +25,7 @@ def test_disabled_tenant_revokes_existing_access(fixture):
         db.get(Tenant, ids["a"]).active = False
         db.commit()
     assert client.get("/api/leads", headers=tokens["tenant_admin"]).status_code == 403
-    assert client.post("/api/auth/login", json={"email": "tenant_admin@example.com", "password": "test-password-123"}).status_code == 403
+    assert client.post("/api/auth/login", json={"email": "tenant_admin@example.com", "password": "test-password-123"}).status_code == 401
 
 def test_login_and_bootstrap_removed(fixture):
     client, _, _, _ = fixture

@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from datetime import date, datetime, time, timezone
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import Literal
+from collections import defaultdict
 from app.core.audit import audit
 from app.core.security import hash_password
 from sqlalchemy import func
@@ -137,12 +139,23 @@ def create_campaign(data: CampaignCreate, _: object = Depends(super_admin), db: 
     return row
 
 @router.get("/analytics/summary")
-def analytics_summary(user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
+def analytics_summary(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
     q = db.query(Campaign)
     lq = db.query(Lead)
     if user.role != "super_admin":
         q = q.filter(Campaign.tenant_id == user.tenant_id)
         lq = lq.filter(Lead.tenant_id == user.tenant_id)
+    if from_date:
+        q = q.filter(Campaign.date >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
+        lq = lq.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
+    if to_date:
+        end = datetime.combine(to_date, time.max, tzinfo=timezone.utc)
+        q = q.filter(Campaign.date <= end)
+        lq = lq.filter(Lead.created_at <= end)
+    if platform:
+        q = q.filter(Campaign.platform == platform)
+    if campaign:
+        q = q.filter(Campaign.id == campaign)
 
     campaigns = q.all()
     lead_count = lq.count()
@@ -153,6 +166,15 @@ def analytics_summary(user=Depends(require_roles("tenant_admin", "marketer", "an
     tracked_leads = sum(x.leads for x in campaigns) or lead_count
     sales = sum(x.sales for x in campaigns)
     revenue = sum(x.revenue for x in campaigns)
+    daily = defaultdict(lambda: {"views": 0, "clicks": 0})
+    for item in campaigns:
+        day = item.date.date().isoformat() if item.date else "unknown"
+        daily[day]["views"] += item.impressions or 0
+        daily[day]["clicks"] += item.clicks or 0
+    daily_activity = [
+        {"date": day, **values, "ctr": round(values["clicks"] / values["views"] * 100, 2) if values["views"] else 0}
+        for day, values in sorted(daily.items())
+    ]
 
     return {
         "spend": round(spend, 2),
@@ -160,18 +182,28 @@ def analytics_summary(user=Depends(require_roles("tenant_admin", "marketer", "an
         "clicks": clicks,
         "leads": tracked_leads,
         "sales": sales,
+        "qualified": lq.filter(Lead.status.in_(["QUALIFIED", "qualified", "MEETING", "meeting"])).count(),
         "revenue": round(revenue, 2),
         "ctr": round(clicks / impressions * 100, 2) if impressions else 0,
         "cpc": round(spend / clicks, 2) if clicks else 0,
         "cpl": round(spend / tracked_leads, 2) if tracked_leads else 0,
         "roas": round(revenue / spend, 2) if spend else 0,
+        "daily_activity": daily_activity,
     }
 
 @router.get("/analytics/campaigns")
-def analytics_campaigns(user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
+def analytics_campaigns(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
     q = db.query(Campaign)
     if user.role != "super_admin":
         q = q.filter(Campaign.tenant_id == user.tenant_id)
+    if from_date:
+        q = q.filter(Campaign.date >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
+    if to_date:
+        q = q.filter(Campaign.date <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))
+    if platform:
+        q = q.filter(Campaign.platform == platform)
+    if campaign:
+        q = q.filter(Campaign.id == campaign)
     rows = q.order_by(Campaign.date.desc()).limit(200).all()
     result = []
     for x in rows:

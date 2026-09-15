@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
+from datetime import date, datetime, time, timezone
 from app.core.rate_limit import limit
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -57,8 +58,11 @@ def create_public_lead(
     return {"success": True, "lead_id": lead.id}
 
 @router.get("")
-def list_leads(user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
+def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
     q = tenant_query(db, Lead, user)
+    if from_date: q = q.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
+    if to_date: q = q.filter(Lead.created_at <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))
+    if platform: q = q.filter(Lead.source == platform)
     return q.order_by(Lead.created_at.desc()).limit(500).all()
 
 @router.get("/{lead_id}")

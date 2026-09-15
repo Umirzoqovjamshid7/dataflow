@@ -1,87 +1,34 @@
 import React, {useEffect, useState} from "react";
 import {request} from "../api";
 import Kpi from "../components/Kpi";
-import {BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid} from "recharts";
+import {AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid} from "recharts";
 
-export default function Dashboard({role}) {
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const canAnalytics = role !== "sales_manager";
-  const canLeads = ["super_admin", "tenant_admin", "sales_manager"].includes(role);
-  const [summary, setSummary] = useState({});
-  const [campaigns, setCampaigns] = useState([]);
-  const [leads, setLeads] = useState([]);
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+const demoSummary = {spend:"12,480", impressions:124800, clicks:5980, leads:384, qualified:216, cpl:"32.50", ctr:"4.8", sales:42, roas:"3.6"};
+const demoCampaigns = [{id:1,name:"Summer Launch",spend:"4,200",leads:142,cpl:"29.58",ctr:"5.2",sales:19,roas:"4.1"},{id:2,name:"Retargeting",spend:"3,180",leads:118,cpl:"26.95",ctr:"6.1",sales:14,roas:"3.8"},{id:3,name:"Brand Awareness",spend:"5,100",leads:124,cpl:"41.13",ctr:"3.4",sales:9,roas:"2.9"}];
+const demoDailyActivity = [{date:"Jun 01",views:6200,clicks:284},{date:"Jun 02",views:7400,clicks:336},{date:"Jun 03",views:6900,clicks:319},{date:"Jun 04",views:8300,clicks:402},{date:"Jun 05",views:9100,clicks:448},{date:"Jun 06",views:8700,clicks:421},{date:"Jun 07",views:9800,clicks:502},{date:"Jun 08",views:10400,clicks:536},{date:"Jun 09",views:9600,clicks:468},{date:"Jun 10",views:11200,clicks:590},{date:"Jun 11",views:10800,clicks:563},{date:"Jun 12",views:12100,clicks:642},{date:"Jun 13",views:11600,clicks:611},{date:"Jun 14",views:12900,clicks:708}];
+const demoLeads = [{id:1,name:"Aziza Karimova",phone:"+998 90 123 45 67",source:"Facebook",campaign_name:"Summer Launch",status:"new"},{id:2,name:"Jasur Tursunov",phone:"+998 91 234 56 78",source:"Instagram",campaign_name:"Retargeting",status:"qualified"},{id:3,name:"Malika Saidova",phone:"+998 93 345 67 89",source:"Facebook",campaign_name:"Brand Awareness",status:"contacted"}];
 
-  useEffect(()=>{
-    Promise.all([
-      canAnalytics ? request("/api/analytics/summary") : Promise.resolve({}),
-      canAnalytics ? request("/api/analytics/campaigns") : Promise.resolve([]),
-      canLeads ? request("/api/leads") : Promise.resolve([])
-    ]).then(([a,b,c])=>{
-      setSummary(a); setCampaigns(b); setLeads(c);
-    }).catch(e => setError(e.message)).finally(() => setLoading(false));
-  }, [role]);
+function FunnelStep({label,value,base,total,color,previousLabel}) { const ratio=total?Math.min(1,Math.max(0,Number(value)/Number(total))):0; const rate=12+Math.sqrt(ratio)*88; const previousRate=base?Math.min(100,(Number(value)/Number(base))*100):100; return <div className="funnel-step"><div className="funnel-bar" style={{"--funnel-color":color,width:`${rate}%`}}><strong>{Number(value).toLocaleString()}</strong></div><div className="funnel-label"><span>{label}</span>{base&&<small>{previousRate.toFixed(1)}% {previousLabel}</small>}</div></div>; }
+function Pagination({page,total,onChange}) { const pages=Math.max(1,Math.ceil(total/15)); return <div className="table-pagination"><button disabled={page===1} onClick={()=>onChange(page-1)}>Oldingi</button><span>{page} / {pages}</span><button disabled={page>=pages} onClick={()=>onChange(page+1)}>Keyingi</button></div>; }
+function DailyTooltip({active,payload,label}) { if(!active||!payload?.length)return null; const views=Number(payload.find(x=>x.dataKey==="views")?.value||0), clicks=Number(payload.find(x=>x.dataKey==="clicksPlot")?.payload?.clicks||0); return <div className="daily-tooltip"><strong>{label}</strong><span className="tooltip-views">Views: {views.toLocaleString()}</span><span className="tooltip-clicks">Clicks: {clicks.toLocaleString()}</span><span>CTR: {views ? (clicks/views*100).toFixed(1) : "0.0"}%</span></div>; }
 
-  if (loading) return <section className="panel" role="status">Loading dashboard…</section>;
-  if (error) return <section className="panel error" role="alert">{error}</section>;
-
-  return <div>
-    <div className="page-head">
-      <div><h1>Marketing Analytics</h1><p>Facebook → Lead → CRM → Sale</p></div>
-    </div>
-
-    {canAnalytics && <><div className="kpis">
-      <Kpi label="Spend" value={`$${summary.spend || 0}`}/>
-      <Kpi label="Leads" value={summary.leads || 0}/>
-      <Kpi label="CPL" value={`$${summary.cpl || 0}`}/>
-      <Kpi label="CTR" value={`${summary.ctr || 0}%`}/>
-      <Kpi label="Sales" value={summary.sales || 0}/>
-      <Kpi label="ROAS" value={`${summary.roas || 0}x`}/>
-    </div>
-
-    <section className="panel">
-      <h2>Campaign performance</h2>
-      <div style={{height: 320}}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={campaigns}>
-            <CartesianGrid strokeDasharray="3 3"/>
-            <XAxis dataKey="name"/>
-            <YAxis/>
-            <Tooltip/>
-            <Bar dataKey="leads" fill="#111827"/>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
-
-    <section className="panel">
-      <h2>Campaigns</h2>
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>Campaign</th><th>Spend</th><th>Leads</th><th>CPL</th><th>CTR</th><th>Sales</th><th>ROAS</th></tr></thead>
-          <tbody>
-            {campaigns.map(x=><tr key={x.id}>
-              <td>{x.name}</td><td>${x.spend}</td><td>{x.leads}</td><td>${x.cpl}</td><td>{x.ctr}%</td><td>{x.sales}</td><td>{x.roas}x</td>
-            </tr>)}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    </>}
-    {canLeads && <section className="panel">
-      <h2>Latest leads</h2>
-      {!leads.length && <p>No leads yet.</p>}
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Source</th><th>Campaign</th><th>Status</th></tr></thead>
-          <tbody>
-            {leads.slice(0,20).map(x=><tr key={x.id}>
-              <td>{x.name}</td><td>{x.phone}</td><td>{x.source}</td><td>{x.campaign_name || "-"}</td><td><span className="badge">{x.status}</span></td>
-            </tr>)}
-          </tbody>
-        </table>
-      </div>
-    </section>}
-  </div>
+export default function Dashboard({role, language="en", t}) {
+  const [error,setError]=useState(""), [loading,setLoading]=useState(true), [summary,setSummary]=useState({}), [campaigns,setCampaigns]=useState([]), [leads,setLeads]=useState([]), [selectedDay,setSelectedDay]=useState(null), [campaignSearch,setCampaignSearch]=useState(""), [leadSearch,setLeadSearch]=useState(""), [campaignPage,setCampaignPage]=useState(1), [leadPage,setLeadPage]=useState(1);
+  const [filters,setFilters]=useState({from:"",to:"",platform:"",campaign:""}), [applied,setApplied]=useState({from:"",to:"",platform:"",campaign:""});
+  const canAnalytics=role!=="sales_manager", canLeads=["super_admin","tenant_admin","sales_manager"].includes(role);
+  useEffect(()=>{ if(DEMO_MODE){setSummary(demoSummary);setCampaigns(demoCampaigns);setLeads(demoLeads);setLoading(false);return;} const query=new URLSearchParams(Object.entries(applied).filter(([,v])=>v)); const suffix=query.toString()?`?${query}`:""; Promise.all([canAnalytics?request(`/api/analytics/summary${suffix}`):Promise.resolve({}),canAnalytics?request(`/api/analytics/campaigns${suffix}`):Promise.resolve([]),canLeads?request(`/api/leads${suffix}`):Promise.resolve([])]).then(([a,b,c])=>{setSummary(a);setCampaigns(b);setLeads(c)}).catch(e=>setError(e.message)).finally(()=>setLoading(false)); },[role,applied]);
+  if(loading)return <section className="panel" role="status">{t.loading}</section>; if(error)return <section className="panel error" role="alert">{error}</section>;
+  const rawDailyActivity = summary.daily_activity?.length ? summary.daily_activity : (DEMO_MODE ? demoDailyActivity : [{date:"-",views:0,clicks:0}]);
+  const minimumClicks = Math.min(...rawDailyActivity.map(day=>Number(day.clicks||0)));
+  const dailyActivity = rawDailyActivity.map(day=>({...day,clicksPlot:3500+(Number(day.clicks||0)-minimumClicks)*5}));
+  const activeDay = selectedDay || dailyActivity[dailyActivity.length - 1];
+  const journey = {en:{title:"Customer journey",impressions:"Impressions",clicks:"Clicks",leads:"Leads",qualified:"CRM qualified",sales:"Sales",previous:"from previous"},ru:{title:"РџСѓС‚СЊ РєР»РёРµРЅС‚Р°",impressions:"РџРѕРєР°Р·С‹",clicks:"РљР»РёРєРё",leads:"Р›РёРґС‹",qualified:"РљРІР°Р»РёС„РёС†РёСЂРѕРІР°РЅС‹ CRM",sales:"РџСЂРѕРґР°Р¶Рё",previous:"РѕС‚ РїСЂРµРґС‹РґСѓС‰РµРіРѕ"},uz:{title:"Mijoz yoвЂli",impressions:"KoвЂrishlar",clicks:"Bosishlar",leads:"Leadlar",qualified:"CRM saralangan",sales:"Sotuvlar",previous:"oldingi bosqichdan"}}[language]||{};
+  const normalizedCampaignSearch=campaignSearch.toLowerCase().trim(), normalizedLeadSearch=leadSearch.toLowerCase().trim();
+  const visibleCampaigns=campaigns.filter(x=>!normalizedCampaignSearch||[x.name,x.platform].some(v=>String(v||"").toLowerCase().includes(normalizedCampaignSearch))); const visibleLeads=leads.filter(x=>!normalizedLeadSearch||[x.name,x.phone,x.email,x.source,x.campaign_name,x.status].some(v=>String(v||"").toLowerCase().includes(normalizedLeadSearch)));
+  const pagedCampaigns=visibleCampaigns.slice((campaignPage-1)*15,campaignPage*15), pagedLeads=visibleLeads.slice((leadPage-1)*15,leadPage*15);
+  return <div><div className="page-head"><div><h1>{t.marketing}</h1><p>{t.funnel}</p></div></div>
+    <section className="panel dashboard-filters"><div className="filter-title"><div><h2>Filter</h2><p>Choose a period and campaign to inspect the full journey.</p></div><button className="clear-filter" onClick={()=>{setFilters({from:"",to:"",platform:"",campaign:""});setApplied({from:"",to:"",platform:"",campaign:""})}}>Clear</button></div><form className="filter-grid" onSubmit={e=>{e.preventDefault();setApplied(filters)}}><label>From<input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label><label>To<input type="date" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/></label><label>Platform<select value={filters.platform} onChange={e=>setFilters({...filters,platform:e.target.value})}><option value="">All platforms</option><option value="facebook">Facebook / Meta</option><option value="instagram">Instagram</option></select></label><label>Campaign<select value={filters.campaign} onChange={e=>setFilters({...filters,campaign:e.target.value})}><option value="">All campaigns</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><button className="apply-filter" type="submit">Apply filters</button></form></section>
+    {canAnalytics&&<><div className="kpis"><Kpi label={t.spend} value={`$${summary.spend||0}`}/><Kpi label={t.leads} value={summary.leads||0}/><Kpi label={t.cpl} value={`$${summary.cpl||0}`}/><Kpi label={t.ctr} value={`${summary.ctr||0}%`}/><Kpi label={t.sales} value={summary.sales||0}/><Kpi label={t.roas} value={`${summary.roas||0}x`}/></div><section className="panel funnel-panel"><div className="filter-title"><div><h2>{journey.title}</h2></div></div><div className="funnel-steps"><FunnelStep label={journey.impressions} value={summary.impressions||0} total={summary.impressions||0} color="#8b5cf6" previousLabel={journey.previous}/><FunnelStep label={journey.clicks} value={summary.clicks||0} total={summary.impressions||0} base={summary.impressions} color="#a855f7" previousLabel={journey.previous}/><FunnelStep label={journey.leads} value={summary.leads||0} total={summary.impressions||0} base={summary.clicks} color="#c026d3" previousLabel={journey.previous}/><FunnelStep label={journey.qualified} value={summary.qualified||summary.leads||0} total={summary.impressions||0} base={summary.leads} color="#db2777" previousLabel={journey.previous}/><FunnelStep label={journey.sales} value={summary.sales||0} total={summary.impressions||0} base={summary.qualified||summary.leads} color="#f43f5e" previousLabel={journey.previous}/></div></section><section className="panel daily-chart-panel"><div className="filter-title"><div><h2>Daily campaign effect</h2></div><div className="selected-day"><strong>{activeDay.date}</strong><span>{activeDay.clicks.toLocaleString()} clicks В· {(activeDay.clicks / activeDay.views * 100).toFixed(1)}% CTR</span></div></div><div className="daily-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={dailyActivity} onClick={state=>{if(state?.activePayload?.[0]?.payload)setSelectedDay(state.activePayload[0].payload)}} margin={{top:12,right:12,left:0,bottom:0}}><defs><linearGradient id="viewsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.28}/><stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.02}/></linearGradient><linearGradient id="clicksFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ec4899" stopOpacity={0.22}/><stop offset="100%" stopColor="#ec4899" stopOpacity={0.02}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false} width={54}/><Tooltip content={<DailyTooltip/>}/><Area type="monotone" dataKey="views" stroke="#8b5cf6" strokeWidth={3} fill="url(#viewsFill)" activeDot={{r:6}}/><Area type="monotone" dataKey="clicksPlot" stroke="#ec4899" strokeWidth={3} fill="url(#clicksFill)" activeDot={{r:6}}/></AreaChart></ResponsiveContainer></div><div className="chart-legend"><span><i className="legend-dot views-dot"/>Views</span><span><i className="legend-dot clicks-dot"/>Clicks</span></div></section><section className="panel"><h2>{t.campaignPerformance}</h2><div style={{height:320}}><ResponsiveContainer width="100%" height="100%"><BarChart data={campaigns}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="name"/><YAxis/><Tooltip/><Bar dataKey="leads" fill="#8b5cf6"/></BarChart></ResponsiveContainer></div></section><section className="panel"><div className="table-heading"><h2>{t.campaigns}</h2><input className="table-search" type="search" placeholder="Search campaigns..." value={campaignSearch} onChange={e=>{setCampaignSearch(e.target.value);setCampaignPage(1)}}/></div><div className="table-wrap"><table><thead><tr><th>{t.campaign}</th><th>{t.spend}</th><th>{t.leads}</th><th>{t.cpl}</th><th>{t.ctr}</th><th>{t.sales}</th><th>{t.roas}</th></tr></thead><tbody>{pagedCampaigns.map(x=><tr key={x.id}><td>{x.name}</td><td>${x.spend}</td><td>{x.leads}</td><td>${x.cpl}</td><td>{x.ctr}%</td><td>{x.sales}</td><td>{x.roas}x</td></tr>)}</tbody></table></div><Pagination page={campaignPage} total={visibleCampaigns.length} onChange={setCampaignPage}/></section></>}
+    {canLeads&&<section className="panel"><div className="table-heading"><h2>{t.latestLeads}</h2><input className="table-search" type="search" placeholder="Search leads..." value={leadSearch} onChange={e=>{setLeadSearch(e.target.value);setLeadPage(1)}}/></div>{!visibleLeads.length&&<p>{t.noLeads}</p>}<div className="table-wrap"><table><thead><tr><th>{t.fullName}</th><th>Phone</th><th>{t.source}</th><th>{t.campaign}</th><th>{t.status}</th></tr></thead><tbody>{pagedLeads.map(x=><tr key={x.id}><td>{x.name}</td><td>{x.phone}</td><td>{x.source}</td><td>{x.campaign_name||"-"}</td><td><span className="badge">{x.status}</span></td></tr>)}</tbody></table></div><Pagination page={leadPage} total={visibleLeads.length} onChange={setLeadPage}/></section>}</div>;
 }

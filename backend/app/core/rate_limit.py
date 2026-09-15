@@ -6,10 +6,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from app.models.models import RateLimit
 
-def limit(db, request, scope, maximum=20, seconds=60):
+def limit(db, request, scope, maximum=20, seconds=60, identity=None):
     # Ignore untrusted Forwarded headers. Configure trusted proxy networks at ingress.
     host = request.client.host if request.client else "unknown"
-    key = hashlib.sha256(f"{scope}:{host}".encode()).hexdigest()
+    subject = identity or host
+    key = hashlib.sha256(f"{scope}:{subject}".encode()).hexdigest()
     window = int(time.time()) // seconds
     insert = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
     stmt = insert(RateLimit).values(key=key, window=window, count=1)
