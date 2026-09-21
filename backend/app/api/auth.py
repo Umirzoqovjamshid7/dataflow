@@ -20,7 +20,7 @@ DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
 def login(data: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     trusted_origin(request)
     email = str(data.email).strip().lower()
-    limit(db, request, "login-ip", maximum=30)
+    limit(db, request, "login-ip", maximum=10)
     limit(db, request, "login-account", maximum=10, identity=email)
     user = db.query(User).filter(User.email == email).first()
     password_ok = verify_password(data.password, user.password_hash if user else DUMMY_HASH)

@@ -30,4 +30,4 @@ Status: partial implementation of phases 1–2, with deployment safety fixes nee
 
 ## Evidence
 
-See `PHASES.md` for test outcomes and touched files. A successful build or unit test does not establish provider readiness or complete tenant isolation across future endpoints.
+The current test/build results are recorded in the project handoff rather than as a separate historical ledger. A successful build or unit test does not establish provider readiness or complete tenant isolation across future endpoints.

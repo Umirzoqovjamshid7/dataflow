@@ -8,7 +8,11 @@ FastAPI + React asosidagi multi-tenant SaaS. Ishga tushirish serverda Docker Com
 2. `.env.example` faylidan serverda `.env` yarating. Database paroli, JWT secret va haqiqiy HTTPS domenni kiriting.
 3. [DEPLOYMENT.md](DEPLOYMENT.md) bo'yicha image build, migratsiya, admin yaratish va HTTPS ingressni sozlang.
 
-Frontend APIga o'z domenidagi `/api-proxy` orqali ulanadi. PostgreSQL va backend tashqi portlarga ochilmaydi. Frontendning server ichki porti `127.0.0.1:8080`; foydalanuvchilar faqat HTTPS domen orqali kiradi.
+Frontend APIga o'z domenidagi `/api-proxy` orqali ulanadi. PostgreSQL va backend tashqi portlarga ochilmaydi. Frontend konteynerining ichki porti `80`, hostdagi Compose porti esa `127.0.0.1:8081`; foydalanuvchilar productionda faqat HTTPS domen orqali kiradi.
+
+## Lokal ishga tushirish
+
+Windows yoki Linux uchun qisqa yo'riqnoma: [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
 
 ## Joriy holat
 
@@ -18,9 +22,8 @@ To'liq o'n fazali ish hali tugamagan. Meta, CRM, Telegram delivery, sales attrib
 
 ## Hujjatlar
 
-- [Audit](AUDIT.md)
 - [Arxitektura](ARCHITECTURE.md)
 - [Xavfsizlik](SECURITY.md)
 - [Server deployment](DEPLOYMENT.md)
-- [Bajarilgan ishlar](PHASES.md)
 - [Qolgan ishlar](REMAINING_ISSUES.md)
+- [API endpointlar](API.md)
