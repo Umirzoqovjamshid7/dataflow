@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Team = lazy(() => import("./pages/Team"));
 const Settings = lazy(() => import("./pages/Settings"));
+const AIAdvisor = lazy(() => import("./pages/AIAdvisor"));
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
 
 function Login({onLogin, t}) {
@@ -52,6 +53,7 @@ function pageFromPath(pathname) {
   if (pathname === "/admin") return "admin";
   if (pathname === "/team") return "team";
   if (pathname === "/settings") return "settings";
+  if (pathname === "/ai-advisor") return "ai";
   return "dashboard";
 }
 
@@ -71,7 +73,7 @@ function App() {
   useEffect(() => localStorage.setItem("language", language), [language]);
 
   function navigate(nextPage) {
-    const path = nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : "/dashboard";
+    const path = nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : nextPage === "settings" ? "/settings" : nextPage === "ai" ? "/ai-advisor" : "/dashboard";
     window.history.pushState({}, "", path);
     setPage(nextPage);
   }
@@ -106,6 +108,7 @@ function App() {
       {role === "super_admin" && <a href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>{t.superAdmin}</a>}
       {role === "tenant_admin" && <a href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>{t.team}</a>}
       <a href="/settings" onClick={e => {e.preventDefault(); navigate("settings"); setSidebarOpen(false);}}>{t.settings}</a>
+      <a href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>{t.aiNav}</a>
       <button onClick={async ()=>{
         if (DEMO_MODE) return;
         try { await request("/api/auth/logout", {method: "POST"}); }
@@ -120,7 +123,9 @@ function App() {
             ? <Team tenantId={user.tenant_id} t={t}/>
             : visiblePage === "settings"
               ? <Settings darkMode={darkMode} setDarkMode={setDarkMode} language={language} setLanguage={setLanguage} t={t}/>
-              : <Admin t={t}/>}</Suspense>
+              : visiblePage === "ai"
+                ? <AIAdvisor role={role} t={t}/>
+                : <Admin t={t}/>}</Suspense>
     </main>
   </div>
 }
