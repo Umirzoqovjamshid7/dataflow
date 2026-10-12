@@ -4,14 +4,12 @@ import {request, setToken, restoreSession} from "./api";
 import BrandMark from "./components/BrandMark";
 import {translations} from "./i18n";
 import "./styles.css";
-import AppLayout from "./components/AppLayout";
-import {pageFromPath, routes} from "./navigation";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Team = lazy(() => import("./pages/Team"));
 const Settings = lazy(() => import("./pages/Settings"));
 const AIAdvisor = lazy(() => import("./pages/AIAdvisor"));
-const Business = lazy(() => import("./pages/Business"));
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
 
 function Login({onLogin, t}) {
   const [email, setEmail] = useState("");
@@ -51,12 +49,20 @@ function Login({onLogin, t}) {
   </div>
 }
 
+function pageFromPath(pathname) {
+  if (pathname === "/admin") return "admin";
+  if (pathname === "/team") return "team";
+  if (pathname === "/settings") return "settings";
+  if (pathname === "/ai-advisor") return "ai";
+  return "dashboard";
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(() => pageFromPath(window.location.pathname));
-  const [navigationVersion,setNavigationVersion] = useState(0);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") !== "light");
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 700);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
   const [language, setLanguage] = useState(() => localStorage.getItem("language") || "uz");
   const t = translations[language] || translations.uz;
 
@@ -66,30 +72,22 @@ function App() {
   }, [darkMode]);
   useEffect(() => localStorage.setItem("language", language), [language]);
 
-  function navigate(nextPage, hash="") {
-    const path = (routes[nextPage] || routes.dashboard).path + (hash ? `#${hash}` : "");
+  function navigate(nextPage) {
+    const path = nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : nextPage === "settings" ? "/settings" : nextPage === "ai" ? "/ai-advisor" : "/dashboard";
     window.history.pushState({}, "", path);
     setPage(nextPage);
-    setNavigationVersion(value=>value+1);
-    if (!hash) window.scrollTo({top:0});
   }
-  useEffect(()=>{
-    const hash=window.location.hash.slice(1);
-    if(!hash) return;
-    let attempts=0;
-    const timer=setInterval(()=>{
-      const element=document.getElementById(hash);
-      if(element){element.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"});clearInterval(timer);}
-      else if(++attempts>=60)clearInterval(timer);
-    },100);
-    return ()=>clearInterval(timer);
-  },[page,loading,navigationVersion]);
   const role = user?.role;
   const visiblePage = page === "admin" && role !== "super_admin" ? "dashboard" : page === "team" && role !== "tenant_admin" ? "dashboard" : page;
   useEffect(() => {
+    if (DEMO_MODE) {
+      setUser({role: "tenant_admin", tenant_id: 1, full_name: "Demo User"});
+      setLoading(false);
+      return;
+    }
     restoreSession().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
     const expired = () => setUser(null);
-    const popstate = () => {setPage(pageFromPath(window.location.pathname));setNavigationVersion(value=>value+1);};
+    const popstate = () => setPage(pageFromPath(window.location.pathname));
     window.addEventListener("session-expired", expired);
     window.addEventListener("popstate", popstate);
     return () => {
@@ -101,23 +99,35 @@ function App() {
   if (loading) return <div className="login-wrap" role="status">{t.loading}</div>;
   if (!user) return <Login t={t} onLogin={data => {setUser(data); navigate("dashboard");}} />;
 
-  return <AppLayout page={visiblePage} user={user} onNavigate={navigate} logoutLabel={t.logout} onLogout={async ()=>{
-    try { await request("/api/auth/logout", {method:"POST"}); }
-    finally { setToken(null);setUser(null); }
-  }}>
+  return <div className={`shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+    <button className="menu-toggle" aria-label="Toggle navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? "‹" : "☰"}</button>
+    {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+    <aside>
+      <div className="brand"><BrandMark /><strong>DataFlow</strong></div>
+      <a href="/dashboard" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);}}>{t.dashboard}</a>
+      {role === "super_admin" && <a href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>{t.superAdmin}</a>}
+      {role === "tenant_admin" && <a href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>{t.team}</a>}
+      <a href="/settings" onClick={e => {e.preventDefault(); navigate("settings"); setSidebarOpen(false);}}>{t.settings}</a>
+      <a href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>{t.aiNav}</a>
+      <button onClick={async ()=>{
+        if (DEMO_MODE) return;
+        try { await request("/api/auth/logout", {method: "POST"}); }
+        finally { setToken(null); setUser(null); }
+      }}>{t.logout}</button>
+    </aside>
+    <main>
       <Suspense fallback={<section className="panel" role="status">Loading page…</section>}>
         {visiblePage === "dashboard"
           ? <Dashboard role={role} language={language} t={t}/>
           : visiblePage === "team"
             ? <Team tenantId={user.tenant_id} t={t}/>
             : visiblePage === "settings"
-              ? <Settings role={role} darkMode={darkMode} setDarkMode={setDarkMode} language={language} setLanguage={setLanguage} t={t}/>
+              ? <Settings darkMode={darkMode} setDarkMode={setDarkMode} language={language} setLanguage={setLanguage} t={t}/>
               : visiblePage === "ai"
                 ? <AIAdvisor role={role} t={t}/>
-                : ["crm","employees","calls","plans"].includes(visiblePage)
-                  ? <Business section={visiblePage} role={role}/>
-                  : <Admin t={t}/>}</Suspense>
-  </AppLayout>
+                : <Admin t={t}/>}</Suspense>
+    </main>
+  </div>
 }
 
 createRoot(document.getElementById("root")).render(<App/>);

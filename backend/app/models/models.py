@@ -1,6 +1,6 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import String, Integer, Numeric, DateTime, Date, ForeignKey, Boolean, Text, CheckConstraint, UniqueConstraint
+from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey, Boolean, Text, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 
@@ -28,7 +28,6 @@ class Campaign(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     platform: Mapped[str] = mapped_column(String(50), default="facebook")
-    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     spend: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -87,49 +86,3 @@ class RateLimit(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window: Mapped[int] = mapped_column(Integer)
     count: Mapped[int] = mapped_column(Integer)
-
-class ProviderConnection(Base):
-    __tablename__ = "v5_provider_connections"
-    __table_args__ = (UniqueConstraint("tenant_id", "provider", name="uq_v5_connection"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    provider: Mapped[str] = mapped_column(String(30))
-    credentials_encrypted: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(30), default="configured")
-    tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_error: Mapped[str | None] = mapped_column(String(180), nullable=True)
-    synced_records: Mapped[int] = mapped_column(Integer, default=0)
-    operation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-class SyncJob(Base):
-    __tablename__ = "v5_sync_jobs"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    connection_id: Mapped[int] = mapped_column(ForeignKey("v5_provider_connections.id"), index=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    start_date: Mapped[date] = mapped_column(Date)
-    end_date: Mapped[date] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(String(30), default="queued", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-class ExternalRecord(Base):
-    __tablename__ = "v5_external_records"
-    __table_args__ = (UniqueConstraint("tenant_id", "provider", "kind", "external_id", name="uq_v5_external_record"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    provider: Mapped[str] = mapped_column(String(30))
-    kind: Mapped[str] = mapped_column(String(30))
-    external_id: Mapped[str] = mapped_column(String(180))
-    data_json: Mapped[str] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-class BusinessPlan(Base):
-    __tablename__ = "v5_business_plans"
-    __table_args__ = (UniqueConstraint("tenant_id", "month", "metric", name="uq_v5_plan"), CheckConstraint("target >= 0", name="ck_v5_plan_target"))
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
-    month: Mapped[str] = mapped_column(String(7))
-    metric: Mapped[str] = mapped_column(String(30))
-    target: Mapped[Decimal] = mapped_column(Numeric(18, 2))

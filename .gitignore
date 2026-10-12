@@ -231,8 +231,4 @@ __pycache__/
 node_modules/
 dist/
 .runtime/
-# Local visual design source; not a second application in this repository.
-/MFactor/
-frontend/test-results/
-frontend/playwright-report/
 *.log

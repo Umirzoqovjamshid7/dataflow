@@ -1,4 +1,0 @@
-kassa.192-255-242-92.sslip.io {
-    encode zstd gzip
-    reverse_proxy frontend:80
-}

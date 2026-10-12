@@ -1,25 +1,29 @@
 ﻿# LeadFlow SaaS
 
-FastAPI + React asosidagi multi-tenant SaaS. Loyiha faqat joriy serverda Docker Compose, Caddy va HTTPS orqali ishlaydi.
-
-Joriy manzil: `https://kassa.192-255-242-92.sslip.io`.
+FastAPI + React asosidagi multi-tenant SaaS. Ishga tushirish serverda Docker Compose, domen va HTTPS orqali bajariladi.
 
 ## Serverga joylash
 
-1. Repository fayllarini joriy Linux serverga yuklang. `.venv`, `node_modules`, `dist`, test bazalari va boshqa serverdagi `.env` yoki database fayllarini ko'chirmang.
-2. `.env.example` faylidan aynan joriy serverda yangi `.env` yarating. Yangi database paroli va JWT secret kiriting.
-3. [DEPLOYMENT.md](DEPLOYMENT.md) bo'yicha image build, migratsiya, admin yaratish va Caddy orqali HTTPS'ni ishga tushiring.
+1. Repository fayllarini Docker Engine va Compose o'rnatilgan Linux serverga yuklang. `.venv`, `node_modules`, `dist` va test bazalarini yuklamang.
+2. `.env.example` faylidan serverda `.env` yarating. Database paroli, JWT secret va haqiqiy HTTPS domenni kiriting.
+3. [DEPLOYMENT.md](DEPLOYMENT.md) bo'yicha image build, migratsiya, admin yaratish va HTTPS ingressni sozlang.
 
-Frontend APIga o'z domenidagi `/api-proxy` orqali ulanadi. PostgreSQL va backend tashqi portlarga ochilmaydi. Foydalanuvchilar faqat joriy HTTPS domen orqali kiradi.
+Frontend APIga o'z domenidagi `/api-proxy` orqali ulanadi. PostgreSQL va backend tashqi portlarga ochilmaydi. Frontend konteynerining ichki porti `80`, hostdagi Compose porti esa `127.0.0.1:8081`; foydalanuvchilar productionda faqat HTTPS domen orqali kiradi.
+
+## Lokal ishga tushirish
+
+Windows yoki Linux uchun qisqa yo'riqnoma: [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
 
 ## Joriy holat
 
 Audit, tenant/RBAC tekshiruvlari, Argon2 parollar, JWT/refresh sessiyalar, rate limiting, Alembic migratsiyalari va boshlang'ich admin/team boshqaruvi mavjud. Ochiq bootstrap va standart administrator paroli yo'q.
 
-V5 migration branchda kompaniya sozlamalaridan Bitrix24, Meta Ads, amoCRM, OnlinePBX va OpenAI ulanishlari, shifrlangan credentiallar, ulanish testi, navbatdagi sync worker, markazlashgan KPI/trend, CRM/business jamlanmalari va faqat o'qiydigan AI tools qo'shildi. Live accountlar va production PostgreSQL/Docker hali tekshirilmagan. OAuth avtomatik refresh, Telegram delivery va CRM/reklama atributsiyasi tugallanmagan; loyiha hali sotuvga tayyor deb tasdiqlanmagan.
+To'liq o'n fazali ish hali tugamagan. Meta, CRM, Telegram delivery, sales attribution, AI va background worker qismlari tugallanmagan. Server konfiguratsiyasi mavjudligi butun mahsulot production-ready ekanligini anglatmaydi.
 
 ## Hujjatlar
 
+- [Arxitektura](ARCHITECTURE.md)
+- [Xavfsizlik](SECURITY.md)
 - [Server deployment](DEPLOYMENT.md)
-- [Amaliy maslahatlar](maslahat.md)
-- [V5 audit, migration va test hisoboti](MIGRATION_V5.md)
+- [Qolgan ishlar](REMAINING_ISSUES.md)
+- [API endpointlar](API.md)

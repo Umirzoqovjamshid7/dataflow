@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     JWT_SECRET: str
     CORS_ORIGINS: str
-    INTEGRATION_ENCRYPTION_KEY: str = ""
-    META_GRAPH_VERSION: str = "v23.0"
 
     @model_validator(mode="after")
     def validate_security(self):

@@ -4,7 +4,7 @@ from app.core.rate_limit import limit
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.core.db import get_db
-from app.models.models import Campaign, Lead, Tenant
+from app.models.models import Lead, Tenant
 from app.schemas.schemas import LeadCreate
 from app.api.deps import require_roles, tenant_query
 
@@ -58,18 +58,12 @@ def create_public_lead(
     return {"success": True, "lead_id": lead.id}
 
 @router.get("")
-def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, offset: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=500), user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
+def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
     q = tenant_query(db, Lead, user)
     if from_date: q = q.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
     if to_date: q = q.filter(Lead.created_at <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))
     if platform: q = q.filter(Lead.source == platform)
-    if campaign:
-        campaign_query = db.query(Campaign).filter(Campaign.id == campaign)
-        if user.role != "super_admin": campaign_query = campaign_query.filter(Campaign.tenant_id == user.tenant_id)
-        selected = campaign_query.first()
-        if not selected: return []
-        q = q.filter(Lead.campaign_name == selected.name)
-    return q.order_by(Lead.created_at.desc(), Lead.id.desc()).offset(offset).limit(limit).all()
+    return q.order_by(Lead.created_at.desc()).limit(500).all()
 
 @router.get("/{lead_id}")
 def get_lead(lead_id: int, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):

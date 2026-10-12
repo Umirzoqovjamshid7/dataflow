@@ -8,10 +8,6 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.leads import router as leads_router
 from app.api.admin import router as admin_router
-from app.api.analytics import router as analytics_router
-from app.api.integrations import router as integrations_router
-from app.api.business import router as business_router
-from app.api.ai import router as ai_router
 
 app = FastAPI(
     title="LeadFlow SaaS API",
@@ -32,10 +28,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(leads_router)
 app.include_router(admin_router)
-app.include_router(analytics_router)
-app.include_router(integrations_router)
-app.include_router(business_router)
-app.include_router(ai_router)
 
 @app.get("/")
 def root():
@@ -46,7 +38,7 @@ def ready():
     try:
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if revision != "0005":
+        if revision != "0004":
             return JSONResponse({"status": "migration_required"}, status_code=503)
     except SQLAlchemyError:
         return JSONResponse({"status": "database_unavailable"}, status_code=503)
