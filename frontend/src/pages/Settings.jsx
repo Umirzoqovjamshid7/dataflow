@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {request} from "../api";
+import {PageContainer} from "../components/AppLayout";
 import {languageNames} from "../i18n";
 
 const providers = [
@@ -47,8 +48,8 @@ export default function Settings({role, darkMode, setDarkMode, language, setLang
     } catch(e) {setError(e.message);}
     finally {try {await reload();} catch(e) {setError(e.message);}setBusy(false);}
   }
-  return <div className="settings-page">
-    <div className="page-head"><div><span className="eyebrow">DATAFLOW V5</span><h1>{t.settingsTitle}</h1><p>Har bir kompaniya o'z API hisoblarini mustaqil ulaydi.</p></div></div>
+  return <PageContainer className="settings-page">
+
     <section className="panel integration-panel">
       <h2>Integratsiyalar</h2>
       {!canManage ? <p>API ulanishlarini kompaniya administratori boshqaradi.</p> : <>
@@ -72,5 +73,5 @@ export default function Settings({role, darkMode, setDarkMode, language, setLang
     </section>
     <section className="panel settings-panel"><h2>{t.language}</h2><select value={language} onChange={e=>setLanguage(e.target.value)}>{Object.entries(languageNames).map(([code,name])=><option key={code} value={code}>{name}</option>)}</select><div className="theme-options"><button className={!darkMode?"theme-option active":"theme-option"} onClick={()=>setDarkMode(false)}>{t.light}</button><button className={darkMode?"theme-option active":"theme-option"} onClick={()=>setDarkMode(true)}>{t.dark}</button></div></section>
     <section className="panel"><h2>Telegram hisobotlari</h2><p>Telegram delivery va avtomatik hisobot jadvali hali ulanmagan.</p></section>
-  </div>;
+  </PageContainer>;
 }

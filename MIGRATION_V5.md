@@ -48,7 +48,7 @@ Frontend: `frontend/src/pages/Settings.jsx`, `AIAdvisor.jsx`, `Business.jsx`, `D
 
 Konfiguratsiya/hujjatlar: `.env.example`, `backend/.env.example`, `backend/requirements.txt`, `backend/.dockerignore`, `frontend/.dockerignore`, `frontend/nginx.conf`, `frontend/package-lock.json`, `docker-compose.yml`, `README.md`, `DEPLOYMENT.md`, `MIGRATION_V5.md`.
 
-`MFactor/` foydalanuvchining avvaldan mavjud alohida Git repository'si. Auditdan keyin foydalanuvchi uning Python backendini o'chirdi. GitHub uchun faqat `MFactor/dashboard/` ichidagi HTML, CSS va JavaScript fayllari asosiy repository'dagi `references/mfactor/dashboard/`ga nusxalandi; eski deploy konfiguratsiyalari va preview server qo'shilmadi. Reference HTML sahifalarining `/mfactor_api/*` endpointlari DataFlow'ga ulanmagan, shuning uchun bu fayllar standalone ishlaydigan dashboard deb taqdim etilmaydi. MFactor production'i o'zgartirilmadi. Productionga deploy, mavjud bazani qayta yaratish yoki production API chaqiruvi bajarilmadi.
+`MFactor/` foydalanuvchining avvaldan mavjud alohida Git repository'si. V5 bosqichida GitHub uchun dashboard HTML/CSS/JS fayllari `references/mfactor/dashboard/`ga nusxalangan edi. Keyingi frontend dizayn integratsiyasida foydalanilmaydigan, asl manba bilan byte-identical bo'lgan bu 10 nusxa olib tashlandi. Asl local `MFactor/` saqlandi va DataFlow Git ignore'iga qo'shildi. Joriy holat va frontend tekshiruvlari: [UI_INTEGRATION_REPORT.md](UI_INTEGRATION_REPORT.md). MFactor production'i, database va production API hisoblariga tegilmadi; deploy bajarilmadi.
 
 ## Testlar va tekshiruv chegaralari
 

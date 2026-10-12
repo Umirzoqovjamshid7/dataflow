@@ -2,6 +2,7 @@ import React, {useEffect, useState} from "react";
 import {request} from "../api";
 import Team from "./Team";
 import Kpi from "../components/Kpi";
+import {PageContainer} from "../components/AppLayout";
 
 export default function Admin({t}) {
   const [error, setError] = useState("");
@@ -31,9 +32,9 @@ export default function Admin({t}) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
-  return <div>
+  return <PageContainer className="admin-page">
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="page-head"><div><h1>{t.superAdmin}</h1><p>{t.allCustomers}</p></div></div>
+
     {summary && <div className="kpis">{Object.entries(summary).filter(([key]) => key !== "metric_source").map(([key, value]) => <Kpi key={key} label={key.replaceAll("_", " ")} value={value}/>)}</div>}
     {selected && <><button onClick={() => setSelected(null)}>{t.closeTeam}</button><Team tenantId={selected} t={t}/></>}
 
@@ -65,5 +66,5 @@ export default function Admin({t}) {
         </div>)}
       </div>
     </section>
-  </div>
+  </PageContainer>
 }

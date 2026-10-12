@@ -4,6 +4,8 @@ import {request, setToken, restoreSession} from "./api";
 import BrandMark from "./components/BrandMark";
 import {translations} from "./i18n";
 import "./styles.css";
+import AppLayout from "./components/AppLayout";
+import {pageFromPath, routes} from "./navigation";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Team = lazy(() => import("./pages/Team"));
@@ -49,20 +51,11 @@ function Login({onLogin, t}) {
   </div>
 }
 
-function pageFromPath(pathname) {
-  if (["/crm","/employees","/calls","/plans"].includes(pathname)) return pathname.slice(1);
-  if (pathname === "/admin") return "admin";
-  if (pathname === "/team") return "team";
-  if (pathname === "/settings") return "settings";
-  if (pathname === "/ai-advisor") return "ai";
-  return "dashboard";
-}
-
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(() => pageFromPath(window.location.pathname));
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 700);
+  const [navigationVersion,setNavigationVersion] = useState(0);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") !== "light");
   const [language, setLanguage] = useState(() => localStorage.getItem("language") || "uz");
   const t = translations[language] || translations.uz;
@@ -73,17 +66,30 @@ function App() {
   }, [darkMode]);
   useEffect(() => localStorage.setItem("language", language), [language]);
 
-  function navigate(nextPage) {
-    const path = ["crm","employees","calls","plans"].includes(nextPage) ? `/${nextPage}` : nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : nextPage === "settings" ? "/settings" : nextPage === "ai" ? "/ai-advisor" : "/dashboard";
+  function navigate(nextPage, hash="") {
+    const path = (routes[nextPage] || routes.dashboard).path + (hash ? `#${hash}` : "");
     window.history.pushState({}, "", path);
     setPage(nextPage);
+    setNavigationVersion(value=>value+1);
+    if (!hash) window.scrollTo({top:0});
   }
+  useEffect(()=>{
+    const hash=window.location.hash.slice(1);
+    if(!hash) return;
+    let attempts=0;
+    const timer=setInterval(()=>{
+      const element=document.getElementById(hash);
+      if(element){element.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"});clearInterval(timer);}
+      else if(++attempts>=60)clearInterval(timer);
+    },100);
+    return ()=>clearInterval(timer);
+  },[page,loading,navigationVersion]);
   const role = user?.role;
   const visiblePage = page === "admin" && role !== "super_admin" ? "dashboard" : page === "team" && role !== "tenant_admin" ? "dashboard" : page;
   useEffect(() => {
     restoreSession().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
     const expired = () => setUser(null);
-    const popstate = () => setPage(pageFromPath(window.location.pathname));
+    const popstate = () => {setPage(pageFromPath(window.location.pathname));setNavigationVersion(value=>value+1);};
     window.addEventListener("session-expired", expired);
     window.addEventListener("popstate", popstate);
     return () => {
@@ -95,24 +101,10 @@ function App() {
   if (loading) return <div className="login-wrap" role="status">{t.loading}</div>;
   if (!user) return <Login t={t} onLogin={data => {setUser(data); navigate("dashboard");}} />;
 
-  return <div className={`shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-    <button className="menu-toggle" aria-label="Navigatsiyani ochish yoki yopish" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? "‹" : "☰"}</button>
-    {sidebarOpen && <button className="sidebar-overlay" aria-label="Navigatsiyani yopish" onClick={() => setSidebarOpen(false)} />}
-    <aside>
-      <div className="brand"><BrandMark /><strong>DataFlow</strong></div>
-      <a className={visiblePage === "dashboard" ? "active" : ""} aria-current={visiblePage === "dashboard" ? "page" : undefined} href="/dashboard" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);}}>Marketing tahlili</a>
-      <a href="/dashboard#campaigns" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);setTimeout(() => document.getElementById("campaigns")?.scrollIntoView({behavior:"smooth"}), 50)}}>Kampaniyalar</a>
-      {["tenant_admin","marketer","analyst"].includes(role) && [["crm","CRM va sotuvlar"],["employees","Xodimlar"],["calls","Qo'ng'iroqlar"],["plans","Plan / Fakt"]].map(([key,label]) => <a key={key} className={visiblePage===key ? "active" : ""} aria-current={visiblePage===key ? "page" : undefined} href={`/${key}`} onClick={e=>{e.preventDefault();navigate(key);setSidebarOpen(false);}}>{label}</a>)}
-      {role === "super_admin" && <a className={visiblePage === "admin" ? "active" : ""} href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>Umumiy tahlil</a>}
-      {role === "tenant_admin" && <a className={visiblePage === "team" ? "active" : ""} href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>Jamoa</a>}
-      <a className={visiblePage === "ai" ? "active" : ""} href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>AI tahlil</a>
-      <a className={visiblePage === "settings" ? "active" : ""} href="/settings" onClick={e => {e.preventDefault(); navigate("settings"); setSidebarOpen(false);}}>Integratsiyalar va sozlamalar</a>
-      <button onClick={async ()=>{
-        try { await request("/api/auth/logout", {method: "POST"}); }
-        finally { setToken(null); setUser(null); }
-      }}>{t.logout}</button>
-    </aside>
-    <main>
+  return <AppLayout page={visiblePage} user={user} onNavigate={navigate} logoutLabel={t.logout} onLogout={async ()=>{
+    try { await request("/api/auth/logout", {method:"POST"}); }
+    finally { setToken(null);setUser(null); }
+  }}>
       <Suspense fallback={<section className="panel" role="status">Loading page…</section>}>
         {visiblePage === "dashboard"
           ? <Dashboard role={role} language={language} t={t}/>
@@ -125,8 +117,7 @@ function App() {
                 : ["crm","employees","calls","plans"].includes(visiblePage)
                   ? <Business section={visiblePage} role={role}/>
                   : <Admin t={t}/>}</Suspense>
-    </main>
-  </div>
+  </AppLayout>
 }
 
 createRoot(document.getElementById("root")).render(<App/>);

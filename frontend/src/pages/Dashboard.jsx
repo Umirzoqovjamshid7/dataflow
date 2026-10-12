@@ -1,5 +1,7 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {request} from "../api";
+import {DataTable, ChartCard, FilterBar} from "../components/AnalyticsUI";
+import {PageContainer} from "../components/AppLayout";
 import {collectPages} from "../pagination";
 import Kpi from "../components/Kpi";
 import {formatMetric, safeNumber, sortRows} from "../analytics";
@@ -54,21 +56,21 @@ function ChartTooltip({active, payload, label, currency}) {
 
 function FunnelStep({label, value, base, max, color, rate=null, linked=true, note}) {
   if (!linked) rate = null;
-  const width = max > 0 ? Math.max(10, Math.min(100, safeNumber(value) / max * 100)) : 10;
+  const width = value != null && max > 0 ? Math.max(0, Math.min(100, safeNumber(value) / max * 100)) : 0;
   return <div className="v3-funnel-step" title={note || `${label}: ${formatMetric(value)}`}>
-    <div className="v3-funnel-copy"><span>{label}</span><strong>{formatMetric(value)}</strong></div>
+    <div className="v3-funnel-copy"><span>{label}</span><strong>{value == null ? "Ma'lumot yo'q" : formatMetric(value)}</strong></div>
     <div className="v3-funnel-track"><span style={{width:`${width}%`, background:color}} /></div>
     <small>{base === null ? "Boshlang'ich bosqich" : rate === null ? (note || "Bog'lanish tasdiqlanmagan") : `${rate.toFixed(1)}% oldingi bosqichdan`}</small>
   </div>;
 }
 
 function SkeletonDashboard() {
-  return <div className="dashboard-page" aria-busy="true" aria-label="Ma'lumotlar yuklanmoqda">
+  return <PageContainer className="dashboard-page" aria-busy="true" aria-label="Ma'lumotlar yuklanmoqda">
     <div className="skeleton skeleton-title" />
     <div className="kpis">{Array.from({length:6}, (_, index) => <div className="kpi skeleton-card" key={index}><i/><i/><i/></div>)}</div>
     <div className="panel skeleton skeleton-panel" />
     <div className="panel skeleton skeleton-chart" />
-  </div>;
+  </PageContainer>;
 }
 
 function download(filename, content, type) {
@@ -198,10 +200,10 @@ export default function Dashboard({role}) {
   if (loading) return <SkeletonDashboard/>;
   if (error) return <section className="panel error-state" role="alert"><span>!</span><h2>Ma'lumot yuklanmadi</h2><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>Qayta urinish</button></section>;
 
-  return <div className="dashboard-page">
-    <header className="page-head dashboard-heading"><div><span className="eyebrow">DATAFLOW ANALYTICS</span><h1>Marketing tahlili</h1><p>Reklama xarajatidan sotuvgacha bo'lgan haqiqiy natijalar</p></div><span className="live-chip"><i/> Joriy ma'lumotlar</span></header>
+  return <PageContainer className="dashboard-page">
 
-    <section className="panel dashboard-filters">
+
+    <FilterBar>
       <div className="filter-title"><div><h2>Filtrlar</h2><p>Barcha ko'rsatkichlar tanlangan davr bo'yicha bir vaqtda yangilanadi.</p></div><button className="clear-filter" type="button" onClick={() => {setFilters(initial);setApplied(initial)}}>Tozalash</button></div>
       <div className="quick-filters">{[["today","Bugun"],["yesterday","Kecha"],["7days","7 kun"],["30days","30 kun"],["month","Joriy oy"],["lastMonth","O'tgan oy"]].map(([key,label]) => <button type="button" key={key} onClick={() => applyQuick(key)}>{label}</button>)}</div>
       <form className="filter-grid" onSubmit={event => {event.preventDefault();setApplied(filters);setPage(1);setLeadPage(1)}}>
@@ -211,7 +213,7 @@ export default function Dashboard({role}) {
         <label>Kampaniya<select value={filters.campaign} onChange={event => setFilters({...filters,campaign:event.target.value})}><option value="">Barcha kampaniyalar</option>{campaignOptions.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
         <button className="apply-filter" type="submit">Filtrni qo'llash</button>
       </form>
-    </section>
+    </FilterBar>
 
     {canAnalytics && <>
       {summary.currency === "mixed" && <section className="panel" role="status">Turli valyutalar topildi. Pul summalari va CPL jamlanmaydi; kampaniya bo'yicha filtrlang.</section>}
@@ -237,30 +239,30 @@ export default function Dashboard({role}) {
       </section>
 
       <section className="dashboard-chart-grid">
-        <article className="panel chart-card chart-card-wide">
+        <ChartCard wide>
           <div className="section-heading"><div><span className="eyebrow">KUNLIK DINAMIKA</span><h2>Kunlik reklama samaradorligi</h2></div><select aria-label="Grafik ko'rsatkichi" value={dailyMetric} onChange={event => setDailyMetric(event.target.value)}><option value="spend">Xarajat</option><option value="leads">Lidlar</option><option value="clicks">Bosishlar</option></select></div>
           {!daily.length || (summary.currency === "mixed" && dailyMetric === "spend") ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily} margin={{top:12,right:12,left:0,bottom:0}}><defs><linearGradient id="metricFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8B5CF6" stopOpacity=".34"/><stop offset="100%" stopColor="#8B5CF6" stopOpacity=".02"/></linearGradient></defs><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false} width={58}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Area type="monotone" dataKey={dailyMetric} name={{spend:"Xarajat",leads:"Lidlar",clicks:"Bosishlar"}[dailyMetric]} stroke="#8B5CF6" strokeWidth={3} fill="url(#metricFill)" activeDot={{r:5}} isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
-        </article>
-        <article className="panel chart-card">
+        </ChartCard>
+        <ChartCard>
           <div className="section-heading"><div><span className="eyebrow">SAMARADORLIK</span><h2>CPL dinamikasi</h2></div></div>
           {!daily.length || summary.currency === "mixed" ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Area type="monotone" dataKey="cpl" name="CPL" stroke="#38BDF8" strokeWidth={3} fill="#38BDF822" isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
-        </article>
-        <article className="panel chart-card">
+        </ChartCard>
+        <ChartCard>
           <div className="section-heading"><div><span className="eyebrow">KANALLAR</span><h2>Platformalar samaradorligi</h2></div></div>
           {!platformData.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={platformData}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="platform"/><YAxis/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Legend/><Bar dataKey="leads" name="Lidlar" fill="#38BDF8" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/><Bar dataKey="sales" name="Sotuvlar" fill="#22C55E" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
-        </article>
-        <article className="panel chart-card chart-card-wide">
+        </ChartCard>
+        <ChartCard wide>
           <div className="section-heading"><div><span className="eyebrow">TOP 10</span><h2>Kampaniyalar reytingi</h2></div></div>
           {!topCampaigns.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={topCampaigns} layout="vertical" margin={{left:24}}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" horizontal={false}/><XAxis type="number"/><YAxis type="category" dataKey="name" width={110}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Bar dataKey="leads" name="Lidlar" fill="#8B5CF6" radius={[0,6,6,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
-        </article>
+        </ChartCard>
       </section>
 
       <section className="panel" id="campaigns">
         <div className="table-heading"><div><span className="eyebrow">BATAFSIL</span><h2>Kampaniyalar</h2></div><div className="table-actions"><input className="table-search" type="search" placeholder="Kampaniya qidirish..." value={search} onChange={event => {setSearch(event.target.value);setPage(1)}}/><details className="column-menu"><summary>Ustunlar</summary><div>{columns.map(([key,label]) => <label key={key}><input type="checkbox" checked={visibleColumns.has(key)} onChange={() => toggleColumn(key)}/>{label}</label>)}</div></details><button type="button" onClick={() => exportCampaigns(sortedCampaigns,"csv")}>CSV</button><button type="button" onClick={() => exportCampaigns(sortedCampaigns,"xls")}>Excel</button></div></div>
-        {!filteredCampaigns.length ? <EmptyState text="Filtrga mos kampaniya topilmadi."/> : <><div className="table-wrap"><table><thead><tr>{columns.filter(([key]) => visibleColumns.has(key)).map(([key,label]) => <th key={key}>{key === "index" ? label : <button type="button" onClick={() => changeSort(key)}>{label}{sort.key === key ? (sort.direction === "desc" ? " ↓" : " ↑") : ""}</button>}</th>)}</tr></thead><tbody>{pagedCampaigns.map((row,index) => <tr key={row.id}>{columns.filter(([key]) => visibleColumns.has(key)).map(([key]) => <td key={key}>{cell(row,key,index)}</td>)}</tr>)}</tbody></table></div><Pagination page={page} total={filteredCampaigns.length} onChange={setPage}/></>}
+        {!filteredCampaigns.length ? <EmptyState text="Filtrga mos kampaniya topilmadi."/> : <><DataTable><thead><tr>{columns.filter(([key]) => visibleColumns.has(key)).map(([key,label]) => <th key={key}>{key === "index" ? label : <button type="button" onClick={() => changeSort(key)}>{label}{sort.key === key ? (sort.direction === "desc" ? " ↓" : " ↑") : ""}</button>}</th>)}</tr></thead><tbody>{pagedCampaigns.map((row,index) => <tr key={row.id}>{columns.filter(([key]) => visibleColumns.has(key)).map(([key]) => <td key={key}>{cell(row,key,index)}</td>)}</tr>)}</tbody></DataTable><Pagination page={page} total={filteredCampaigns.length} onChange={setPage}/></>}
       </section>
     </>}
 
-    {canLeads && <section className="panel"><div className="table-heading"><div><span className="eyebrow">CRM</span><h2>So'nggi lidlar</h2></div><input className="table-search" type="search" placeholder="Lid qidirish..." value={leadSearch} onChange={event => {setLeadSearch(event.target.value);setLeadPage(1)}}/></div>{!filteredLeads.length ? <EmptyState text="Filtrga mos lid topilmadi."/> : <><div className="table-wrap"><table><thead><tr><th>To'liq ism</th><th>Telefon</th><th>Manba</th><th>Kampaniya</th><th>Holat</th></tr></thead><tbody>{pagedLeads.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.phone}</td><td>{row.source}</td><td>{row.campaign_name || "—"}</td><td><span className="badge">{row.status}</span></td></tr>)}</tbody></table></div><Pagination page={leadPage} total={filteredLeads.length} onChange={setLeadPage}/></>}</section>}
-  </div>;
+    {canLeads && <section className="panel"><div className="table-heading"><div><span className="eyebrow">CRM</span><h2>So'nggi lidlar</h2></div><input className="table-search" type="search" placeholder="Lid qidirish..." value={leadSearch} onChange={event => {setLeadSearch(event.target.value);setLeadPage(1)}}/></div>{!filteredLeads.length ? <EmptyState text="Filtrga mos lid topilmadi."/> : <><DataTable><thead><tr><th>To'liq ism</th><th>Telefon</th><th>Manba</th><th>Kampaniya</th><th>Holat</th></tr></thead><tbody>{pagedLeads.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.phone}</td><td>{row.source}</td><td>{row.campaign_name || "—"}</td><td><span className="badge">{row.status}</span></td></tr>)}</tbody></DataTable><Pagination page={leadPage} total={filteredLeads.length} onChange={setLeadPage}/></>}</section>}
+  </PageContainer>;
 }

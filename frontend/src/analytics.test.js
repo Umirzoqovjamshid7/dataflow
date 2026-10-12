@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {businessTone, conversionRate, formatMetric, percentageChange, safeNumber, sortRows} from "./analytics.js";
 import {collectPages} from "./pagination.js";
+import {routes,pageFromPath,navigationItems} from "./navigation.js";
 
 test("foiz o'zgarishi to'g'ri hisoblanadi", () => {
   assert.equal(percentageChange(118.7, 100), 18.7);
@@ -38,4 +39,17 @@ test("API pagination includes every page and never silently truncates", async ()
   assert.deepEqual(result,[1,2,3]);
   assert.deepEqual(offsets,[0,2]);
   await assert.rejects(()=>collectPages(async()=>[1,2],2,2),/hajmi katta/);
+});
+
+test("existing routes resolve uniquely and superadmin navigation is absent",()=>{
+  const paths=Object.values(routes).map(route=>route.path);
+  assert.equal(new Set(paths).size,paths.length);
+  for(const [key,route] of Object.entries(routes))assert.equal(pageFromPath(route.path),key);
+  assert.equal(pageFromPath("/unknown"),"dashboard");
+  for(const role of ["super_admin","tenant_admin","marketer","analyst","sales_manager"]){
+    assert.ok(!navigationItems(role).some(item=>item.path==="/admin"));
+    assert.ok(!navigationItems(role).some(item=>/mfactor/i.test(item.path+item.title)));
+  }
+  assert.ok(navigationItems("tenant_admin").some(item=>item.key==="team"));
+  assert.ok(!navigationItems("sales_manager").some(item=>item.key==="crm"));
 });
