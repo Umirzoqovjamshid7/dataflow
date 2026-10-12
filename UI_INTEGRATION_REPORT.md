@@ -1,5 +1,15 @@
 # DataFlow — MFactor visual integration
 
+## GitHub push holati va ignore qoidalari
+
+`nothing to commit, working tree clean` — kuzatiladigan fayllarda yangi o'zgarish yo'q. `Everything up-to-date` — lokal branchdagi commitlar GitHubga allaqachon yuborilgan. Bu xabarlar push xatosi emas.
+
+MFactor dizayn integratsiyasi `7e36351` commitida DataFlow `frontend/src/` tuzilmasiga joylangan va GitHub `main` branchiga yuborilgan. `AppLayout.jsx`, `AppLayout.module.css`, `AnalyticsUI.jsx`, `navigation.js`, yangilangan sahifalar va testlar Git tomonidan kuzatiladi. Dizaynni yuklash uchun asl `MFactor/` papkasini qayta qo'shish kerak emas.
+
+`.gitignore` dagi `/MFactor/` qoidasi asl alohida loyihani DataFlow repository'siga takroran qo'shmaslik uchun saqlangan. `node_modules/`, `dist/`, `frontend/test-results/` va `frontend/playwright-report/` dependency, build va test artefaktlarini chiqarib tashlaydi. `.env` va `.env.*` maxfiy sozlamalarni chiqarib tashlaydi; faqat `.env.example` konfiguratsiya namunalari kuzatiladi. Maxfiy kalitlar bu namunalarga yozilmasligi kerak.
+
+Keyingi haqiqiy frontend o'zgarishlari `frontend/src/` ichida qilinadi, diff ko'rib chiqiladi va oddiy commit/push orqali yuboriladi. Ignore qilingan fayllarni `git add -f` bilan qo'shish yoki `--force` push qilish talab etilmaydi.
+
 Scope: frontend only. MFactor is a visual reference; DataFlow remains the only application. Backend, database, credentials, authentication API and provider integrations were not modified. No production deployment was performed.
 
 ## Audit and duplicate cleanup
