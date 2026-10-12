@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {businessTone, formatMetric, percentageChange, safeNumber} from "../analytics";
+import {formatMetric, safeNumber} from "../analytics";
 
 function useCountUp(value, reducedMotion) {
   const target = safeNumber(value);
@@ -19,17 +19,21 @@ function useCountUp(value, reducedMotion) {
   return display;
 }
 
-export default function Kpi({label, icon, value, previous, metric, type, comparisonLabel, tooltip, reducedMotion=false}) {
+export default function Kpi({label, icon, value, type, currency, comparisonLabel, tooltip, stats, reducedMotion=false}) {
   const display = useCountUp(value, reducedMotion);
-  const change = percentageChange(value, previous);
-  const tone = businessTone(metric, change);
-  const direction = change === null || change === 0 ? "→" : change > 0 ? "↑" : "↓";
+  const change = stats?.change_percent ?? null;
+  const tone = stats?.tone || "neutral";
+  const direction = stats?.direction === "up" ? "↑" : stats?.direction === "down" ? "↓" : "→";
+  const trend = Array.isArray(stats?.trend) ? stats.trend : [];
+  const max = Math.max(1, ...trend.map(point => safeNumber(point.value)));
   return <article className="kpi" title={tooltip}>
     <div className="kpi-top"><span>{label}</span><span className="kpi-icon" aria-hidden="true">{icon}</span></div>
-    <strong>{formatMetric(display, type)}</strong>
+    <strong>{value == null ? "—" : formatMetric(display, type, currency)}</strong>
+    <small className="kpi-previous">Oldingi davr: {stats?.previous == null ? "—" : formatMetric(stats.previous, type, stats.previous_currency)}</small>
     <div className={`kpi-change ${tone}`}>
       <b>{direction} {change === null ? "—" : `${change > 0 ? "+" : ""}${change.toFixed(1)}%`}</b>
       <small>{change === null ? "Taqqoslash uchun ma'lumot yo'q" : comparisonLabel}</small>
     </div>
+    {value != null && trend.length > 0 && trend.every(point=>point.value!=null) && <svg className="kpi-trend" viewBox="0 0 120 28" role="img" aria-label="7 kunlik trend"><polyline fill="none" stroke="currentColor" strokeWidth="2" points={trend.map((point, index) => `${index * 20},${26 - safeNumber(point.value) / max * 24}`).join(" ")}/></svg>}
   </article>;
 }

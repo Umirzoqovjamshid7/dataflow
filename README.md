@@ -16,9 +16,10 @@ Frontend APIga o'z domenidagi `/api-proxy` orqali ulanadi. PostgreSQL va backend
 
 Audit, tenant/RBAC tekshiruvlari, Argon2 parollar, JWT/refresh sessiyalar, rate limiting, Alembic migratsiyalari va boshlang'ich admin/team boshqaruvi mavjud. Ochiq bootstrap va standart administrator paroli yo'q.
 
-To'liq o'n fazali ish hali tugamagan. Meta, CRM, Telegram delivery, sales attribution, AI va background worker qismlari tugallanmagan. Server konfiguratsiyasi mavjudligi butun mahsulot production-ready ekanligini anglatmaydi.
+V5 migration branchda kompaniya sozlamalaridan Bitrix24, Meta Ads, amoCRM, OnlinePBX va OpenAI ulanishlari, shifrlangan credentiallar, ulanish testi, navbatdagi sync worker, markazlashgan KPI/trend, CRM/business jamlanmalari va faqat o'qiydigan AI tools qo'shildi. Live accountlar va production PostgreSQL/Docker hali tekshirilmagan. OAuth avtomatik refresh, Telegram delivery va CRM/reklama atributsiyasi tugallanmagan; loyiha hali sotuvga tayyor deb tasdiqlanmagan.
 
 ## Hujjatlar
 
 - [Server deployment](DEPLOYMENT.md)
 - [Amaliy maslahatlar](maslahat.md)
+- [V5 audit, migration va test hisoboti](MIGRATION_V5.md)

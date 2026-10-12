@@ -2,6 +2,8 @@
 
 Deployment faqat joriy Linux server va `https://kassa.192-255-242-92.sslip.io` uchun sozlangan. Eski server, uning `.env` fayli, database'i va backup ma'lumotlari ishlatilmaydi.
 
+Mavjud production uchun quyidagi yangi o'rnatish bosqichlarini takrorlamang. V5 yangilanish tartibi hujjat oxirida. Production deployment faqat egasi tasdiqlagandan so'ng bajariladi.
+
 ## 1. Server va environment
 
 Joriy serverda Docker Engine va Compose o'rnatilgan bo'lishi kerak. Firewall orqali `80/tcp`, `443/tcp` va HTTP/3 kerak bo'lsa `443/udp` portlarini oching. HTTPS sertifikatini Compose ichidagi Caddy avtomatik boshqaradi.
@@ -56,4 +58,32 @@ Har kuni faqat joriy serverdagi PostgreSQL bazasidan `pg_dump -Fc` backup oling 
 
 ## Tekshiruv chegarasi
 
-Joriy serverda Caddy/TLS, konteynerlar va PostgreSQL migratsiyasini alohida tekshirish kerak. Redis/worker servislar hali yozilmagan.
+Joriy serverda Caddy/TLS, konteynerlar va PostgreSQL migratsiyasini alohida tekshirish kerak. V5 PostgreSQL navbatli import worker'ga ega; Redis talab qilinmaydi.
+
+## Mavjud database uchun V5 yangilanishi — tasdiqdan keyin
+
+Mavjud `.env`, database DSN, JWT secret, domen va Docker volume'larni saqlang. Bazani qayta yaratish, `down -v`, MFactor scriptlarini ishga tushirish, eski serverdan import yoki `alembic stamp` ishlatish mumkin emas.
+
+Avval joriy database backupini shifrlab oling va staging'da restore/upgrade sinovini bajaring. `0005` faqat nullable campaign currency va yangi tenant-scoped jadvallarni qo'shadi; mavjud yozuvlarni ko'chirmaydi yoki o'chirmaydi. Avtomatik downgrade biznes ma'lumotlarini yo'qotmaslik uchun bloklangan.
+
+Joriy serverda alohida Fernet key yarating:
+
+```bash
+docker compose run --rm --no-deps backend python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Kalitni `INTEGRATION_ENCRYPTION_KEY` sifatida faqat server `.env`iga yozing, `chmod 600` bilan himoyalang va shifrlangan backupda saqlang. Kalitni shunchaki almashtirish mavjud credentiallarni ochib bo'lmaydigan qiladi. JWT secret bu maqsadda ishlatilmaydi. Backend va worker bir xil key va `META_GRAPH_VERSION` olishi kerak.
+
+Egasi tasdiqlagandan keyingi operator buyruqlari:
+
+```bash
+docker compose build backend worker frontend
+docker compose run --rm --no-deps backend alembic upgrade head
+docker compose up -d backend worker frontend caddy
+docker compose ps
+curl --fail https://kassa.192-255-242-92.sslip.io/api-proxy/health/ready
+```
+
+Har bir kompaniya administratori o'z sozlamalaridan provider token/webhookini saqlaydi, real ulanish testini bajaradi va ko'pi bilan 31 kunlik syncni navbatga qo'shadi. API `202 queued` qaytarishi sync tugaganini bildirmaydi. Worker yakunida holat `synced` yoki `error` bo'ladi; sozlamalar holatni avtomatik yangilaydi. Worker uzilgan running joblar 10 daqiqadan keyin xato deb qayd etiladi va mijoz qayta sync boshlashi mumkin. Token muddati tugasa mijoz yangi tokenni sozlamadan kiritadi.
+
+Productionda ishga tushirishdan oldin PostgreSQL concurrency, provider pagination/permissions, OnlinePBX account response format/limit, currency va AI model tool calling'ni stagingda tekshiring. OAuth refresh, avtomatik davriy sync va Telegram delivery bu migrationda qo'shilmagan.

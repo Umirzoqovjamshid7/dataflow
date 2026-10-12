@@ -58,7 +58,7 @@ def create_public_lead(
     return {"success": True, "lead_id": lead.id}
 
 @router.get("")
-def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
+def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, offset: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=500), user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
     q = tenant_query(db, Lead, user)
     if from_date: q = q.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
     if to_date: q = q.filter(Lead.created_at <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))
@@ -69,7 +69,7 @@ def list_leads(from_date: date | None = Query(default=None, alias="from"), to_da
         selected = campaign_query.first()
         if not selected: return []
         q = q.filter(Lead.campaign_name == selected.name)
-    return q.order_by(Lead.created_at.desc()).limit(500).all()
+    return q.order_by(Lead.created_at.desc(), Lead.id.desc()).offset(offset).limit(limit).all()
 
 @router.get("/{lead_id}")
 def get_lead(lead_id: int, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):

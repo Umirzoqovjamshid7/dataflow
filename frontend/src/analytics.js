@@ -17,9 +17,10 @@ export function businessTone(metric, change) {
   return improvement ? "positive" : "negative";
 }
 
-export function formatMetric(value, type = "number") {
+export function formatMetric(value, type = "number", currency = "USD") {
+  if (value === null) return "—";
   const number = safeNumber(value);
-  if (type === "money") return `$${number.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (type === "money") return `${currency === "USD" ? "$" : currency === "unknown" || currency === "mixed" ? "" : currency + " "}${number.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   if (type === "percent") return `${number.toLocaleString("uz-UZ", {minimumFractionDigits: 1, maximumFractionDigits: 1})}%`;
   if (type === "ratio") return `${number.toLocaleString("uz-UZ", {minimumFractionDigits: 1, maximumFractionDigits: 2})}x`;
   return number.toLocaleString("uz-UZ", {maximumFractionDigits: 0});

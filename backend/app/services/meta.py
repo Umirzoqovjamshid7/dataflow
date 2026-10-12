@@ -15,12 +15,17 @@ Never collect a user's Facebook password directly.
 """
 
 def normalize_insight(row: dict) -> dict:
-    impressions = int(row.get("impressions", 0) or 0)
-    clicks = int(row.get("clicks", 0) or 0)
+    try:
+        impressions = max(0, int(row.get("impressions", 0) or 0))
+        clicks = max(0, int(row.get("clicks", 0) or 0))
+    except (ValueError, TypeError, OverflowError):
+        raise ValueError("Invalid Meta count") from None
     try:
         spend = Decimal(str(row.get("spend", 0) or 0))
     except (InvalidOperation, ValueError):
-        spend = Decimal("0")
+        raise ValueError("Invalid Meta spend") from None
+    if not spend.is_finite() or spend < 0:
+        raise ValueError("Invalid Meta spend")
     ctr = (clicks / impressions * 100) if impressions else 0
     cpc = (spend / clicks) if clicks else 0
     return {

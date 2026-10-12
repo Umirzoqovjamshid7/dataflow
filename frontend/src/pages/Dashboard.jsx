@@ -1,12 +1,13 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {request} from "../api";
+import {collectPages} from "../pagination";
 import Kpi from "../components/Kpi";
-import {conversionRate, formatMetric, safeNumber, sortRows} from "../analytics";
+import {formatMetric, safeNumber, sortRows} from "../analytics";
 import {Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis} from "recharts";
 
 const PAGE_SIZE = 10;
 const columns = [
-  ["index", "№"], ["name", "Reklama kampaniyasi"], ["platform", "Platforma"],
+  ["index", "№"], ["name", "Reklama kampaniyasi"], ["platform", "Platforma"], ["date", "Sana"],
   ["spend", "Xarajat"], ["impressions", "Ko'rishlar"], ["clicks", "Bosishlar"],
   ["ctr", "CTR"], ["leads", "Lidlar"], ["cpl", "CPL"], ["sales", "Sotuvlar"], ["roas", "ROAS"]
 ];
@@ -46,13 +47,13 @@ function EmptyState({text="Tanlangan davr uchun ma'lumot topilmadi."}) {
   return <div className="empty-state"><span aria-hidden="true">⌁</span><strong>Ma'lumot yo'q</strong><p>{text}</p></div>;
 }
 
-function ChartTooltip({active, payload, label}) {
+function ChartTooltip({active, payload, label, currency}) {
   if (!active || !payload?.length) return null;
-  return <div className="chart-tooltip"><strong>{label}</strong>{payload.map(item => <span key={item.dataKey} style={{color:item.color}}>{item.name}: {formatMetric(item.value, item.dataKey === "spend" || item.dataKey === "cpl" ? "money" : "number")}</span>)}</div>;
+  return <div className="chart-tooltip"><strong>{label}</strong>{payload.map(item => <span key={item.dataKey} style={{color:item.color}}>{item.name}: {formatMetric(item.value, item.dataKey === "spend" || item.dataKey === "cpl" ? "money" : "number", currency)}</span>)}</div>;
 }
 
-function FunnelStep({label, value, base, max, color, linked=true, note}) {
-  const rate = linked ? conversionRate(value, base) : null;
+function FunnelStep({label, value, base, max, color, rate=null, linked=true, note}) {
+  if (!linked) rate = null;
   const width = max > 0 ? Math.max(10, Math.min(100, safeNumber(value) / max * 100)) : 10;
   return <div className="v3-funnel-step" title={note || `${label}: ${formatMetric(value)}`}>
     <div className="v3-funnel-copy"><span>{label}</span><strong>{formatMetric(value)}</strong></div>
@@ -87,7 +88,7 @@ function safeCell(value) {
 
 function exportCampaigns(rows, format) {
   const headers = columns.slice(1).map(([, label]) => label);
-  const data = rows.map(row => [row.name, row.platform, row.spend, row.impressions, row.clicks, row.ctr, row.leads, row.cpl, row.sales, row.roas].map(safeCell));
+  const data = rows.map(row => [row.name, row.platform, row.date?.slice(0,10), row.spend, row.impressions, row.clicks, row.ctr, row.leads, row.cpl, row.sales, row.roas].map(safeCell));
   if (format === "csv") {
     const csv = [headers, ...data].map(line => line.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
     download("kampaniyalar.csv", `\uFEFF${csv}`, "text/csv;charset=utf-8");
@@ -131,12 +132,13 @@ export default function Dashboard({role}) {
     const controller = new AbortController();
     const query = new URLSearchParams(Object.entries(applied).filter(([, value]) => value));
     const suffix = query.size ? `?${query}` : "";
+    const collection = path => collectPages((offset, limit) => request(`${path}${suffix}${suffix ? "&" : "?"}offset=${offset}&limit=${limit}`, {signal:controller.signal}));
     setLoading(true);
     setError("");
     Promise.all([
       canAnalytics ? request(`/api/analytics/summary${suffix}`, {signal:controller.signal}) : Promise.resolve({}),
-      canAnalytics ? request(`/api/analytics/campaigns${suffix}`, {signal:controller.signal}) : Promise.resolve([]),
-      canLeads ? request(`/api/leads${suffix}`, {signal:controller.signal}) : Promise.resolve([])
+      canAnalytics ? collection("/api/analytics/campaigns") : Promise.resolve([]),
+      canLeads ? collection("/api/leads") : Promise.resolve([])
     ]).then(([nextSummary, nextCampaigns, nextLeads]) => {
       setSummary(nextSummary);
       setCampaigns(nextCampaigns);
@@ -162,15 +164,9 @@ export default function Dashboard({role}) {
   const filteredLeads = leads.filter(row => !normalizedLeadSearch || [row.name, row.phone, row.source, row.campaign_name, row.status].some(value => String(value || "").toLocaleLowerCase("uz").includes(normalizedLeadSearch)));
   const pagedLeads = filteredLeads.slice((leadPage - 1) * PAGE_SIZE, leadPage * PAGE_SIZE);
   const maxFunnel = Math.max(1, safeNumber(summary.impressions));
-  const platformData = Object.values(campaigns.reduce((result, row) => {
-    const key = row.platform || "Noma'lum";
-    result[key] ||= {platform:key, spend:0, leads:0, sales:0};
-    result[key].spend += safeNumber(row.spend);
-    result[key].leads += safeNumber(row.leads);
-    result[key].sales += safeNumber(row.sales);
-    return result;
-  }, {}));
-  const topCampaigns = sortRows(campaigns, "leads", "desc").slice(0, 10);
+  const platformData = summary.platforms || [];
+  const topCampaigns = summary.top_campaigns || [];
+  const campaignOptions = [...new Map(campaigns.map(row => [`${row.platform}:${row.external_id || row.id}`, row])).values()];
 
   function applyQuick(kind) {
     const range = quickRange(kind);
@@ -190,8 +186,9 @@ export default function Dashboard({role}) {
     });
   }
   function cell(row, key, index) {
+    if (key === "date") return row.date?.slice(0,10) || "—";
     if (key === "index") return (page - 1) * PAGE_SIZE + index + 1;
-    if (key === "spend" || key === "cpl") return formatMetric(row[key], "money");
+    if (key === "spend" || key === "cpl") return formatMetric(row[key], "money", row.currency);
     if (key === "ctr") return formatMetric(row[key], "percent");
     if (key === "roas") return formatMetric(row[key], "ratio");
     if (["impressions", "clicks", "leads", "sales"].includes(key)) return formatMetric(row[key]);
@@ -211,27 +208,29 @@ export default function Dashboard({role}) {
         <label>Boshlanish sanasi<input type="date" max={dateInput(new Date())} value={filters.from} onChange={event => setFilters({...filters,from:event.target.value})}/></label>
         <label>Tugash sanasi<input type="date" min={filters.from} max={dateInput(new Date())} value={filters.to} onChange={event => setFilters({...filters,to:event.target.value})}/></label>
         <label>Platforma<select value={filters.platform} onChange={event => setFilters({...filters,platform:event.target.value,campaign:""})}><option value="">Barcha platformalar</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
-        <label>Kampaniya<select value={filters.campaign} onChange={event => setFilters({...filters,campaign:event.target.value})}><option value="">Barcha kampaniyalar</option>{campaigns.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <label>Kampaniya<select value={filters.campaign} onChange={event => setFilters({...filters,campaign:event.target.value})}><option value="">Barcha kampaniyalar</option>{campaignOptions.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
         <button className="apply-filter" type="submit">Filtrni qo'llash</button>
       </form>
     </section>
 
     {canAnalytics && <>
+      {summary.currency === "mixed" && <section className="panel" role="status">Turli valyutalar topildi. Pul summalari va CPL jamlanmaydi; kampaniya bo'yicha filtrlang.</section>}
+      {summary.currency === "unknown" && <p className="data-note">Valyuta aniqlanmagan: eski yozuvlarda valyuta saqlanmagan.</p>}
       <div className="kpis">
-        <Kpi label="Reklama xarajati" icon="◈" value={summary.spend} previous={previous.spend} metric="spend" type="money" comparisonLabel={comparisonLabel} tooltip="Tanlangan davrdagi jami reklama xarajati" reducedMotion={reducedMotion}/>
-        <Kpi label="Jami lidlar" icon="◎" value={summary.leads} previous={previous.leads} metric="leads" type="number" comparisonLabel={comparisonLabel} tooltip="Reklama yoki lead yozuvlaridan olingan jami lidlar" reducedMotion={reducedMotion}/>
-        <Kpi label="Bir lid narxi" icon="◇" value={summary.cpl} previous={previous.cpl} metric="cpl" type="money" comparisonLabel={comparisonLabel} tooltip="Xarajatning lidlar soniga nisbati" reducedMotion={reducedMotion}/>
-        <Kpi label="Bosish ko'rsatkichi" icon="↗" value={summary.ctr} previous={previous.ctr} metric="ctr" type="percent" comparisonLabel={comparisonLabel} tooltip="Bosishlarning ko'rishlarga nisbati" reducedMotion={reducedMotion}/>
-        <Kpi label="Sotuvlar" icon="▣" value={summary.sales} previous={previous.sales} metric="sales" type="number" comparisonLabel={comparisonLabel} tooltip="Kampaniyalarda qayd etilgan sotuvlar" reducedMotion={reducedMotion}/>
-        <Kpi label="Reklama qaytimi" icon="✦" value={summary.roas} previous={previous.roas} metric="roas" type="ratio" comparisonLabel={comparisonLabel} tooltip="Daromadning reklama xarajatiga nisbati" reducedMotion={reducedMotion}/>
+        <Kpi label="Reklama xarajati" icon="◈" value={summary.spend} previous={previous.spend} metric="spend" currency={summary.currency} stats={summary.kpis?.spend} type="money" comparisonLabel={comparisonLabel} tooltip="Tanlangan davrdagi jami reklama xarajati" reducedMotion={reducedMotion}/>
+        <Kpi label="Jami lidlar" icon="◎" value={summary.leads} previous={previous.leads} metric="leads" currency={summary.currency} stats={summary.kpis?.leads} type="number" comparisonLabel={comparisonLabel} tooltip="Reklama yoki lead yozuvlaridan olingan jami lidlar" reducedMotion={reducedMotion}/>
+        <Kpi label="Bir lid narxi" icon="◇" value={summary.cpl} previous={previous.cpl} metric="cpl" currency={summary.currency} stats={summary.kpis?.cpl} type="money" comparisonLabel={comparisonLabel} tooltip="Xarajatning lidlar soniga nisbati" reducedMotion={reducedMotion}/>
+        <Kpi label="Bosish ko'rsatkichi" icon="↗" value={summary.ctr} previous={previous.ctr} metric="ctr" currency={summary.currency} stats={summary.kpis?.ctr} type="percent" comparisonLabel={comparisonLabel} tooltip="Bosishlarning ko'rishlarga nisbati" reducedMotion={reducedMotion}/>
+        <Kpi label="Sotuvlar" icon="▣" value={summary.sales} previous={previous.sales} metric="sales" currency={summary.currency} stats={summary.kpis?.sales} type="number" comparisonLabel={comparisonLabel} tooltip="Kampaniyalarda qayd etilgan sotuvlar" reducedMotion={reducedMotion}/>
+        <Kpi label="Reklama qaytimi" icon="✦" value={summary.roas} previous={previous.roas} metric="roas" currency={summary.currency} stats={summary.kpis?.roas} type="ratio" comparisonLabel={comparisonLabel} tooltip="Daromadning reklama xarajatiga nisbati" reducedMotion={reducedMotion}/>
       </div>
 
       <section className="panel funnel-panel">
         <div className="section-heading"><div><span className="eyebrow">KONVERSIYA</span><h2>Marketing voronkasi</h2></div><span className="data-note">CRM atributsiyasi tasdiqlanmagan</span></div>
         <div className="v3-funnel">
           <FunnelStep label="Reklama ko'rishlari" value={summary.impressions} base={null} max={maxFunnel} color="#8B5CF6"/>
-          <FunnelStep label="Reklama bosishlari" value={summary.clicks} base={summary.impressions} max={maxFunnel} color="#38BDF8"/>
-          <FunnelStep label="Facebook lidlari" value={summary.leads} base={summary.clicks} max={maxFunnel} color="#22C55E"/>
+          <FunnelStep label="Reklama bosishlari" value={summary.clicks} base={summary.impressions} rate={summary.funnel_rates?.clicks} max={maxFunnel} color="#38BDF8"/>
+          <FunnelStep label="Marketing lidlari" value={summary.leads} base={summary.clicks} rate={summary.funnel_rates?.leads} max={maxFunnel} color="#22C55E" note={summary.lead_source === "lead_records" ? "Lead yozuvlari; reklamaga bog'lanish tasdiqlanmagan" : undefined}/>
           <FunnelStep label="CRM saralangan lidlar" value={summary.qualified} base={summary.leads} max={maxFunnel} color="#F59E0B" linked={false} note="CRM va reklama lidlari bog'lanishi tasdiqlanmagan"/>
           <FunnelStep label="Sotuvlar" value={summary.sales} base={summary.qualified} max={maxFunnel} color="#EF4444" linked={false} note="Sotuv atributsiyasi tasdiqlanmagan"/>
         </div>
@@ -240,19 +239,19 @@ export default function Dashboard({role}) {
       <section className="dashboard-chart-grid">
         <article className="panel chart-card chart-card-wide">
           <div className="section-heading"><div><span className="eyebrow">KUNLIK DINAMIKA</span><h2>Kunlik reklama samaradorligi</h2></div><select aria-label="Grafik ko'rsatkichi" value={dailyMetric} onChange={event => setDailyMetric(event.target.value)}><option value="spend">Xarajat</option><option value="leads">Lidlar</option><option value="clicks">Bosishlar</option></select></div>
-          {!daily.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily} margin={{top:12,right:12,left:0,bottom:0}}><defs><linearGradient id="metricFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8B5CF6" stopOpacity=".34"/><stop offset="100%" stopColor="#8B5CF6" stopOpacity=".02"/></linearGradient></defs><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false} width={58}/><Tooltip content={<ChartTooltip/>}/><Area type="monotone" dataKey={dailyMetric} name={{spend:"Xarajat",leads:"Lidlar",clicks:"Bosishlar"}[dailyMetric]} stroke="#8B5CF6" strokeWidth={3} fill="url(#metricFill)" activeDot={{r:5}} isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
+          {!daily.length || (summary.currency === "mixed" && dailyMetric === "spend") ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily} margin={{top:12,right:12,left:0,bottom:0}}><defs><linearGradient id="metricFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8B5CF6" stopOpacity=".34"/><stop offset="100%" stopColor="#8B5CF6" stopOpacity=".02"/></linearGradient></defs><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false} width={58}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Area type="monotone" dataKey={dailyMetric} name={{spend:"Xarajat",leads:"Lidlar",clicks:"Bosishlar"}[dailyMetric]} stroke="#8B5CF6" strokeWidth={3} fill="url(#metricFill)" activeDot={{r:5}} isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
         </article>
         <article className="panel chart-card">
           <div className="section-heading"><div><span className="eyebrow">SAMARADORLIK</span><h2>CPL dinamikasi</h2></div></div>
-          {!daily.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false}/><Tooltip content={<ChartTooltip/>}/><Area type="monotone" dataKey="cpl" name="CPL" stroke="#38BDF8" strokeWidth={3} fill="#38BDF822" isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
+          {!daily.length || summary.currency === "mixed" ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={daily}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="date" tickLine={false}/><YAxis tickLine={false}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Area type="monotone" dataKey="cpl" name="CPL" stroke="#38BDF8" strokeWidth={3} fill="#38BDF822" isAnimationActive={!reducedMotion}/></AreaChart></ResponsiveContainer></div>}
         </article>
         <article className="panel chart-card">
           <div className="section-heading"><div><span className="eyebrow">KANALLAR</span><h2>Platformalar samaradorligi</h2></div></div>
-          {!platformData.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={platformData}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="platform"/><YAxis/><Tooltip content={<ChartTooltip/>}/><Legend/><Bar dataKey="leads" name="Lidlar" fill="#38BDF8" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/><Bar dataKey="sales" name="Sotuvlar" fill="#22C55E" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
+          {!platformData.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={platformData}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="platform"/><YAxis/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Legend/><Bar dataKey="leads" name="Lidlar" fill="#38BDF8" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/><Bar dataKey="sales" name="Sotuvlar" fill="#22C55E" radius={[6,6,0,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
         </article>
         <article className="panel chart-card chart-card-wide">
           <div className="section-heading"><div><span className="eyebrow">TOP 10</span><h2>Kampaniyalar reytingi</h2></div></div>
-          {!topCampaigns.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={topCampaigns} layout="vertical" margin={{left:24}}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" horizontal={false}/><XAxis type="number"/><YAxis type="category" dataKey="name" width={110}/><Tooltip content={<ChartTooltip/>}/><Bar dataKey="leads" name="Lidlar" fill="#8B5CF6" radius={[0,6,6,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
+          {!topCampaigns.length ? <EmptyState/> : <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><BarChart data={topCampaigns} layout="vertical" margin={{left:24}}><CartesianGrid stroke="#27324A" strokeDasharray="4 4" horizontal={false}/><XAxis type="number"/><YAxis type="category" dataKey="name" width={110}/><Tooltip content={<ChartTooltip currency={summary.currency}/>}/><Bar dataKey="leads" name="Lidlar" fill="#8B5CF6" radius={[0,6,6,0]} isAnimationActive={!reducedMotion}/></BarChart></ResponsiveContainer></div>}
         </article>
       </section>
 

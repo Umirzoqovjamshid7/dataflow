@@ -9,6 +9,7 @@ const Admin = lazy(() => import("./pages/Admin"));
 const Team = lazy(() => import("./pages/Team"));
 const Settings = lazy(() => import("./pages/Settings"));
 const AIAdvisor = lazy(() => import("./pages/AIAdvisor"));
+const Business = lazy(() => import("./pages/Business"));
 
 function Login({onLogin, t}) {
   const [email, setEmail] = useState("");
@@ -49,6 +50,7 @@ function Login({onLogin, t}) {
 }
 
 function pageFromPath(pathname) {
+  if (["/crm","/employees","/calls","/plans"].includes(pathname)) return pathname.slice(1);
   if (pathname === "/admin") return "admin";
   if (pathname === "/team") return "team";
   if (pathname === "/settings") return "settings";
@@ -72,7 +74,7 @@ function App() {
   useEffect(() => localStorage.setItem("language", language), [language]);
 
   function navigate(nextPage) {
-    const path = nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : nextPage === "settings" ? "/settings" : nextPage === "ai" ? "/ai-advisor" : "/dashboard";
+    const path = ["crm","employees","calls","plans"].includes(nextPage) ? `/${nextPage}` : nextPage === "admin" ? "/admin" : nextPage === "team" ? "/team" : nextPage === "settings" ? "/settings" : nextPage === "ai" ? "/ai-advisor" : "/dashboard";
     window.history.pushState({}, "", path);
     setPage(nextPage);
   }
@@ -100,6 +102,7 @@ function App() {
       <div className="brand"><BrandMark /><strong>DataFlow</strong></div>
       <a className={visiblePage === "dashboard" ? "active" : ""} aria-current={visiblePage === "dashboard" ? "page" : undefined} href="/dashboard" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);}}>Marketing tahlili</a>
       <a href="/dashboard#campaigns" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);setTimeout(() => document.getElementById("campaigns")?.scrollIntoView({behavior:"smooth"}), 50)}}>Kampaniyalar</a>
+      {["tenant_admin","marketer","analyst"].includes(role) && [["crm","CRM va sotuvlar"],["employees","Xodimlar"],["calls","Qo'ng'iroqlar"],["plans","Plan / Fakt"]].map(([key,label]) => <a key={key} className={visiblePage===key ? "active" : ""} aria-current={visiblePage===key ? "page" : undefined} href={`/${key}`} onClick={e=>{e.preventDefault();navigate(key);setSidebarOpen(false);}}>{label}</a>)}
       {role === "super_admin" && <a className={visiblePage === "admin" ? "active" : ""} href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>Umumiy tahlil</a>}
       {role === "tenant_admin" && <a className={visiblePage === "team" ? "active" : ""} href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>Jamoa</a>}
       <a className={visiblePage === "ai" ? "active" : ""} href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>AI tahlil</a>
@@ -116,10 +119,12 @@ function App() {
           : visiblePage === "team"
             ? <Team tenantId={user.tenant_id} t={t}/>
             : visiblePage === "settings"
-              ? <Settings darkMode={darkMode} setDarkMode={setDarkMode} language={language} setLanguage={setLanguage} t={t}/>
+              ? <Settings role={role} darkMode={darkMode} setDarkMode={setDarkMode} language={language} setLanguage={setLanguage} t={t}/>
               : visiblePage === "ai"
                 ? <AIAdvisor role={role} t={t}/>
-                : <Admin t={t}/>}</Suspense>
+                : ["crm","employees","calls","plans"].includes(visiblePage)
+                  ? <Business section={visiblePage} role={role}/>
+                  : <Admin t={t}/>}</Suspense>
     </main>
   </div>
 }

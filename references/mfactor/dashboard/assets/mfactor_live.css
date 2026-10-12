@@ -1,0 +1,447 @@
+/* ============================================================
+   MFactor Live — dashboardni "jonli" qiluvchi animatsiyalar
+   Barcha animatsiyalar faqat transform va opacity orqali (GPU).
+   Istisno: SVG chiziq chizilishi — stroke-dashoffset (talab 4).
+   ============================================================ */
+
+:root{
+  --mlive-dur:1300ms;          /* count-up davomiyligi */
+  --mlive-ease:cubic-bezier(.22,1,.36,1);
+  --mlive-flash-ms:600ms;
+  --mlive-green:#16c784;
+  --mlive-red:#f0445b;
+}
+
+/* ---------- 1. Raqamlar: eni sakramasin ---------- */
+/* ro'yxat mfactor_live.js dagi VALUE_SEL bilan bir xil bo'lishi shart */
+.value,.trend,.kpi .val,.metric b,.conversion b,.summary b,
+[data-mlive],.mlive-num{
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1;
+}
+
+/* ---------- 6. Kartalar: hover + umumiy o'tish ---------- */
+.card,.panel,nav a,.filters select,.badge{
+  transition:all .2s ease;
+}
+.card,.kpi,.employee-card{
+  position:relative;
+  will-change:transform;
+}
+
+/* Dashboarddagi barcha vizual bloklar sichqonchasiz va bir vaqtda yaltiraydi.
+   Panel, grafik konteyneri va ichki natija bloklari ham qamrab olinadi. */
+.card,.kpi,.employee-card,[data-mlive-card],.metric,.panel,
+.funnel-card,.funnel-metric,.call-stat,.payment-stat{
+  transition:transform .28s var(--mlive-ease),box-shadow .28s ease,border-color .28s ease,opacity .25s ease;
+}
+.card:hover,.kpi:hover,.employee-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 10px 24px rgba(0,0,0,.32);
+  border-color:#6b5a2c;
+}
+
+/* ---------- 5. Qiymat o'zgarganda karta chetida chaqnash ---------- */
+.card::after,.kpi::after,.employee-card::after{
+  content:"";
+  position:absolute;
+  left:0;top:0;bottom:0;
+  width:3px;
+  border-radius:10px 0 0 10px;
+  opacity:0;
+  pointer-events:none;
+  background:transparent;
+}
+.card.mlive-up::after,.kpi.mlive-up::after,.employee-card.mlive-up::after{background:var(--mlive-green);animation:mlive-flash var(--mlive-flash-ms) ease-out}
+.card.mlive-down::after,.kpi.mlive-down::after,.employee-card.mlive-down::after{background:var(--mlive-red);animation:mlive-flash var(--mlive-flash-ms) ease-out}
+@keyframes mlive-flash{
+  0%{opacity:0}
+  12%{opacity:1}
+  100%{opacity:0}
+}
+
+/* ---------- 2. Kartalar ketma-ket chiqishi (stagger) ---------- */
+@keyframes mlive-in{
+  from{opacity:0;transform:translateY(16px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.mlive-stagger{opacity:0}
+.mlive-stagger.mlive-run{animation:mlive-in .28s var(--mlive-ease) both}
+
+/* ---------- 3. Skeleton (shimmer) — layout shift bo'lmaydi ---------- */
+@keyframes mlive-shimmer{
+  from{transform:translateX(-100%)}
+  to{transform:translateX(100%)}
+}
+.mlive-skel{
+  position:relative;
+  color:transparent!important;
+  background:rgba(117,168,255,.10);
+  border-radius:6px;
+  overflow:hidden;
+  max-width:70%;
+}
+.mlive-skel::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.11),transparent);
+  transform:translateX(-100%);
+  animation:mlive-shimmer 1.4s linear infinite;
+}
+/* panel/jadval uchun blok skeleton — o'lchami oldindan band */
+.mlive-skel-block{
+  position:relative;
+  overflow:hidden;
+  border-radius:8px;
+  background:rgba(117,168,255,.07);
+  min-height:120px;
+}
+.mlive-skel-block::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);
+  transform:translateX(-100%);
+  animation:mlive-shimmer 1.4s linear infinite;
+}
+
+/* ---------- 4. Grafiklar ---------- */
+/* chiziq chapdan o'ngga chizilsin */
+.mlive-draw{
+  stroke-dasharray:var(--mlive-len);
+  stroke-dashoffset:var(--mlive-len);
+  animation:mlive-draw 420ms var(--mlive-ease) forwards;
+}
+@keyframes mlive-draw{to{stroke-dashoffset:0}}
+
+/* to'ldirilgan maydon va nuqtalar */
+.mlive-fade{opacity:0;animation:mlive-fade 260ms ease forwards}
+@keyframes mlive-fade{to{opacity:1}}
+
+.mlive-pop{
+  opacity:0;
+  transform-box:fill-box;
+  transform-origin:center;
+  transform:scale(.3);
+  animation:mlive-pop 380ms var(--mlive-ease) forwards;
+}
+@keyframes mlive-pop{to{opacity:1;transform:scale(1)}}
+
+/* Jadval qatorlari ham yengil kirib keladi; layout o'lchami o'zgarmaydi. */
+.mlive-row-in{animation:mlive-row-in .32s var(--mlive-ease) both}
+@keyframes mlive-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* qayta yuklashda (2-chi va keyingi) — miltillamasin, faqat yumshoq fade */
+.mlive-soft{opacity:0;animation:mlive-fade 260ms ease forwards}
+
+/* ustunli grafik: pastdan yuqoriga (scaleY, width/height EMAS) */
+.mlive-bar-v{
+  transform-origin:bottom center;
+  transform:scaleY(0);
+  transition:transform .8s var(--mlive-ease);
+}
+.mlive-bar-h{
+  transform-origin:left center;
+  transform:scaleX(0);
+  transition:transform .8s var(--mlive-ease);
+}
+/* vazifalar sahifasi: ustunlar endi doimiy balandlikda, scaleY bilan o'sadi */
+.priority i.mlive-bar-v{height:140px;min-height:0;flex:none}
+
+/* ---------- 4. Tooltip silliq chiqsin (150ms) ---------- */
+.mlive-tip{
+  opacity:0;
+  transform:translateY(4px);
+  transition:opacity .15s ease,transform .15s ease;
+}
+.mlive-tip.mlive-tip-on{
+  opacity:1;
+  transform:translateY(0);
+}
+
+/* ---------- 5. "Oxirgi yangilanish" ko'rsatkichi ---------- */
+.mlive-updated{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  margin-top:6px;
+  font-size:11px;
+  color:var(--muted,#7190c2);
+  white-space:nowrap;
+  transition:opacity .2s ease;
+}
+.mlive-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--mlive-green);
+  animation:mlive-pulse 2s ease-in-out infinite;
+}
+.mlive-updated.mlive-busy .mlive-dot{background:var(--gold,#f0b90b)}
+.mlive-updated.mlive-stale .mlive-dot{background:var(--mlive-red);animation:none}
+@keyframes mlive-pulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.3;transform:scale(.75)}
+}
+
+/* ---------- 6. prefers-reduced-motion: hamma narsa o'chadi ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    animation-delay:0ms!important;
+    transition-duration:.001ms!important;
+    transition-delay:0ms!important;
+  }
+  .mlive-stagger{opacity:1}
+  .mlive-row-in{animation:none}
+  .mlive-skel::after,.mlive-skel-block::after,.mlive-dot{animation:none!important}
+  .card:hover{transform:none}
+  .mlive-draw{stroke-dasharray:none;stroke-dashoffset:0}
+  .mlive-bar-v{transform:scaleY(1)}
+  .mlive-bar-h{transform:scaleX(1)}
+}
+
+/* ============================================================
+   TELEFON QATLAMI
+   ------------------------------------------------------------
+   Sahifalarning o'z @media qoidalari <style> da, bu fayl esa
+   ulardan KEYIN yuklanadi — shuning uchun bir xil aniqlikdagi
+   qoidalar bu yerda ustun keladi.
+   ============================================================ */
+
+/* ---------- teginishli ekranlar: hover yopishib qolmasin ---------- */
+@media (hover:none){
+  .card:hover,.kpi:hover,.employee-card:hover{
+    transform:none;
+    box-shadow:none;
+  }
+  /* bosilganda qisqa javob — hover o'rniga */
+  .card:active,.kpi:active,.employee-card:active{
+    transform:scale(.985);
+  }
+}
+*{-webkit-tap-highlight-color:rgba(240,185,11,.15)}
+
+/* ============================================================
+   AMBIENT BACKGROUND — barcha dashboard sahifalari uchun
+   Sekin harakatlanuvchi yumshoq glow fonni chuqurroq va jonliroq
+   ko‘rsatadi, lekin matn va statistikalarni o‘qishga xalaqit bermaydi.
+   ============================================================ */
+body{
+  position:relative;
+  isolation:isolate;
+  overflow-x:hidden;
+  background:
+    radial-gradient(circle at 88% 8%,rgba(44,91,178,.14),transparent 28rem),
+    radial-gradient(circle at 18% 82%,rgba(240,185,11,.055),transparent 25rem),
+    var(--bg,#07101f);
+}
+body::before,
+body::after{
+  content:"";
+  position:fixed;
+  z-index:0;
+  pointer-events:none;
+  border-radius:50%;
+  filter:blur(10px);
+  opacity:.65;
+  will-change:transform,opacity;
+}
+body::before{
+  width:34rem;
+  height:34rem;
+  top:-18rem;
+  right:-10rem;
+  background:radial-gradient(circle,rgba(49,121,255,.24) 0,rgba(49,121,255,.09) 35%,transparent 70%);
+  animation:mfactor-glow-drift 16s ease-in-out infinite alternate;
+}
+body::after{
+  width:30rem;
+  height:30rem;
+  left:-15rem;
+  bottom:-16rem;
+  background:radial-gradient(circle,rgba(240,185,11,.16) 0,rgba(240,185,11,.045) 38%,transparent 72%);
+  animation:mfactor-glow-drift-reverse 20s ease-in-out infinite alternate;
+}
+.app{position:relative;z-index:1}
+main{position:relative;isolation:isolate;background:linear-gradient(120deg,rgba(7,16,31,.08),rgba(7,16,31,.22))}
+main::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  top:0;
+  right:8%;
+  width:min(55vw,760px);
+  height:260px;
+  pointer-events:none;
+  background:radial-gradient(ellipse at top,rgba(61,126,255,.10),transparent 70%);
+  filter:blur(12px);
+  animation:mfactor-header-glow 9s ease-in-out infinite alternate;
+}
+/* Sahifa ochilganda elementlar yengil uchib kiradi va chetida nur paydo bo‘ladi. */
+body:not(.mlive-ready) .app>aside{
+  animation:mfactor-side-entry .7s var(--mlive-ease) both;
+}
+body:not(.mlive-ready) main>header{
+  animation:mfactor-page-entry .72s var(--mlive-ease) both;
+}
+body:not(.mlive-ready) main>.content{
+  animation:mfactor-content-entry .78s .08s var(--mlive-ease) both;
+}
+body:not(.mlive-ready) nav a{
+  animation:mfactor-nav-entry .42s var(--mlive-ease) both;
+}
+body:not(.mlive-ready) nav a:nth-child(1){animation-delay:.12s}
+body:not(.mlive-ready) nav a:nth-child(2){animation-delay:.17s}
+body:not(.mlive-ready) nav a:nth-child(3){animation-delay:.22s}
+body:not(.mlive-ready) nav a:nth-child(4){animation-delay:.27s}
+body:not(.mlive-ready) nav a:nth-child(5){animation-delay:.32s}
+body:not(.mlive-ready) nav a:nth-child(6){animation-delay:.37s}
+@keyframes mfactor-side-entry{
+  from{opacity:0;transform:translateX(-18px);filter:brightness(.7)}
+  65%{filter:brightness(1.25)}
+  to{opacity:1;transform:translateX(0);filter:brightness(1)}
+}
+@keyframes mfactor-page-entry{
+  from{opacity:0;transform:translateY(-12px);filter:brightness(.72)}
+  65%{filter:brightness(1.2)}
+  to{opacity:1;transform:translateY(0);filter:brightness(1)}
+}
+@keyframes mfactor-content-entry{
+  from{opacity:0;transform:translateY(18px);filter:brightness(.72)}
+  65%{filter:brightness(1.12)}
+  to{opacity:1;transform:translateY(0);filter:brightness(1)}
+}
+@keyframes mfactor-nav-entry{
+  from{opacity:0;transform:translateX(-9px)}
+  to{opacity:1;transform:translateX(0)}
+}
+aside{
+  box-shadow:10px 0 45px rgba(0,0,0,.13),inset -1px 0 rgba(117,168,255,.04);
+}
+nav a.active{
+  box-shadow:0 0 24px rgba(240,185,11,.08),inset 0 0 18px rgba(240,185,11,.04);
+}
+@keyframes mfactor-glow-drift{
+  0%{transform:translate3d(0,0,0) scale(1);opacity:.5}
+  100%{transform:translate3d(-70px,85px,0) scale(1.16);opacity:.78}
+}
+@keyframes mfactor-glow-drift-reverse{
+  0%{transform:translate3d(0,0,0) scale(1);opacity:.42}
+  100%{transform:translate3d(80px,-65px,0) scale(1.12);opacity:.7}
+}
+@keyframes mfactor-header-glow{
+  0%{transform:translateX(0) scale(.96);opacity:.45}
+  100%{transform:translateX(-90px) scale(1.08);opacity:.8}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body::before,body::after,main::before{animation:none!important}
+}
+
+/* ---------- keng jadvallar sahifani gorizontal surmasin ---------- */
+.mlive-scroll{
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+}
+.mlive-scroll table{min-width:max-content}
+/* skrollanadigan jadval chetida ishora */
+.mlive-scroll::-webkit-scrollbar{height:6px}
+.mlive-scroll::-webkit-scrollbar-thumb{background:#2c3d58;border-radius:3px}
+
+/* ---------- pastki navigatsiya (aside telefonda yashiringani uchun) ---------- */
+.mlive-nav{display:none}
+
+@media (max-width:800px){
+  .mlive-nav{
+    display:grid;
+    grid-template-columns:repeat(6,1fr);
+    position:fixed;
+    left:0;right:0;bottom:0;
+    z-index:60;
+    background:rgba(11,22,41,.97);
+    border-top:1px solid var(--border,var(--line,#2c3d58));
+    /* sahifadagi `nav{padding:14px 10px}` bu panelga tushmasin */
+    padding:0 0 env(safe-area-inset-bottom,0) 0;
+    margin:0;
+    backdrop-filter:blur(8px);
+  }
+  .mlive-nav a{
+    /* sahifadagi `nav a{display:block;padding:12px 14px;margin:3px 0}` ni bekor qilamiz */
+    margin:0;
+    border-radius:0;
+    background:none;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    min-height:52px;
+    padding:7px 2px;
+    color:#87a8e3;
+    text-decoration:none;
+    font-size:9px;
+    line-height:1.1;
+    text-align:center;
+    transition:color .2s ease,transform .2s ease;
+  }
+  .mlive-nav a b{font-size:17px;font-weight:400;line-height:1}
+  .mlive-nav a span{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .mlive-nav a.active{
+    color:var(--gold,#f0b90b);
+    font-weight:700;
+    background:rgba(240,185,11,.10);
+    box-shadow:inset 0 2px 0 var(--gold,#f0b90b);
+  }
+  .mlive-nav a:active{transform:scale(.92)}
+
+  /* pastki panel kontentni to'smasin */
+  body.mlive-has-nav .content{padding-bottom:78px}
+
+  /* ---------- telefon uchun o'lchamlar ---------- */
+  /* 5 ta kartani ustma-ust emas, 2 ustunda ko'rsatamiz — kam skroll */
+  .cards,.kpis{grid-template-columns:repeat(2,1fr)!important;gap:10px}
+  .card{padding:14px;min-height:0}
+  .card .value{font-size:21px;margin-top:8px}
+  .kpi{padding:12px 13px 10px;min-height:0}
+
+  .content{padding:14px}
+  header{padding:12px 14px}
+  h1{font-size:16px}
+  .panel{padding:15px}
+
+  /* filtrlar butun kenglikda, barmoq bilan bosishga qulay */
+  .filters{width:100%;gap:7px}
+  .filters select{flex:1 1 132px;min-height:38px;font-size:13px}
+
+  /* yangilanish ko'rsatkichi header'da joy egallamasin */
+  .mlive-updated{margin-top:4px;font-size:10px}
+
+  /* skeleton telefonda kengroq — bo'sh joy ko'rinmasin */
+  .mlive-skel{max-width:85%}
+  .mlive-skel-block{min-height:88px}
+}
+
+/* juda tor ekranlar (360px va past) */
+@media (max-width:380px){
+  .mlive-nav a{font-size:8px}
+  .mlive-nav a b{font-size:15px}
+  .card .value{font-size:19px}
+}
+
+/* yotiq holat: past ekranda pastki panel juda ko'p joy olmasin */
+@media (max-width:900px) and (max-height:480px){
+  .mlive-nav a{min-height:42px;font-size:8px}
+  .mlive-nav a b{font-size:14px}
+  body.mlive-has-nav .content{padding-bottom:62px}
+}
+
+@media (prefers-reduced-motion: reduce){
+  .mlive-nav a:active,.card:active,.kpi:active,.employee-card:active{transform:none}
+}

@@ -1,6 +1,10 @@
 .env
 .env.*
+!.env.example
 __pycache__
-*.db
-tests
+*.pyc
 .pytest_cache
+tests
+*.db
+*.sqlite*
+.venv

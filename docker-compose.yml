@@ -21,6 +21,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
     command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     restart: unless-stopped
     healthcheck:
@@ -30,6 +32,21 @@ services:
       retries: 5
     depends_on:
       db:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
+    depends_on:
+      backend:
         condition: service_healthy
 
   frontend:
