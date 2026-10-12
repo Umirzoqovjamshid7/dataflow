@@ -1,12 +1,12 @@
-﻿# Server deployment
+﻿# Joriy serverga joylash
 
-Deployment faqat Linux server, Docker Compose, haqiqiy domen va HTTPS uchun sozlangan. Loyihaning tugallanmagan funksiyalari `REMAINING_ISSUES.md`da keltirilgan.
+Deployment faqat joriy Linux server va `https://kassa.192-255-242-92.sslip.io` uchun sozlangan. Eski server, uning `.env` fayli, database'i va backup ma'lumotlari ishlatilmaydi.
 
 ## 1. Server va environment
 
-Docker Engine, Compose va host Nginx o'rnating. Domen DNS yozuvini server IP manziliga yo'naltiring. Firewall orqali HTTPS uchun 443, HTTP redirect va sertifikat tekshiruvi uchun 80 portlarini oching.
+Joriy serverda Docker Engine va Compose o'rnatilgan bo'lishi kerak. Firewall orqali `80/tcp`, `443/tcp` va HTTP/3 kerak bo'lsa `443/udp` portlarini oching. HTTPS sertifikatini Compose ichidagi Caddy avtomatik boshqaradi.
 
-Repositoryni serverga yuklang; `.venv`, `node_modules`, `dist`, test bazalari va kompyuterdagi `.env`ni yuklamang.
+Repositoryni joriy serverga yuklang. Eski serverdan `.env`, PostgreSQL volume, dump, `.venv`, `node_modules`, `dist` yoki test bazalarini ko'chirmang.
 
 ```bash
 cp .env.example .env
@@ -14,7 +14,7 @@ openssl rand -hex 32
 openssl rand -hex 48
 ```
 
-Birinchi tasodifiy qiymatni database paroli sifatida `POSTGRES_PASSWORD` va `DATABASE_URL` ichiga, ikkinchisini `JWT_SECRET`ga kiriting. `DATABASE_URL` hostname'i Compose ichida `db` bo'ladi. Hex formatdan boshqa parol ishlatilsa, DSN ichida URL-encode qiling. `CORS_ORIGINS=https://SIZNING-DOMENINGIZ` qilib o'zgartiring; oxiriga slash qo'ymang. `.env`ga `chmod 600 .env` qo'llang. Compose backendni production rejimida ishga tushiradi.
+Birinchi tasodifiy qiymatni database paroli sifatida `POSTGRES_PASSWORD` va `DATABASE_URL` ichiga, ikkinchisini `JWT_SECRET`ga kiriting. `DATABASE_URL` hostname'i Compose ichida `db` bo'ladi. `CORS_ORIGINS=https://kassa.192-255-242-92.sslip.io` bo'lib qolishi kerak; oxiriga slash qo'ymang. `.env`ga `chmod 600 .env` qo'llang.
 
 ## 2. Build, migratsiya va administrator
 
@@ -22,42 +22,38 @@ Birinchi tasodifiy qiymatni database paroli sifatida `POSTGRES_PASSWORD` va `DAT
 docker compose build
 docker compose up -d db
 docker compose run --rm backend alembic upgrade head
-docker compose run --rm backend python -m app.cli admin@SIZNING-DOMENINGIZ
+docker compose run --rm backend python -m app.cli admin@kassa.192-255-242-92.sslip.io
 docker compose up -d backend frontend
 ```
 
-Admin paroli yashirin prompt orqali kiritiladi. Standart account yoki ochiq bootstrap yo'q. Mavjud database uchun quyidagi upgrade bo'limini avval o'qing.
+Admin paroli yashirin prompt orqali kiritiladi. Standart account yoki ochiq bootstrap yo'q. Bu buyruqlar joriy serverda yangi database va yangi admin yaratadi.
 
-## 3. Domen va HTTPS
+## 3. HTTPS va tekshiruv
 
-Domen uchun haqiqiy TLS sertifikat oling va avtomatik yangilanishini sozlang. `deploy/nginx.conf` ichidagi `leadflow.example.com` va sertifikat yo'llarini o'zingiznikiga almashtiring. Konfiguratsiyani host Nginx server konfiguratsiyalari ichiga o'rnating, so'ng:
+Caddy `deploy/Caddyfile`dagi joriy domen uchun sertifikatni avtomatik oladi. Barcha servislarni ishga tushiring:
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
+docker compose up -d
+docker compose ps
+curl --fail https://kassa.192-255-242-92.sslip.io/api-proxy/health/ready
 ```
 
-Host Nginx 443 portida HTTPSni qabul qiladi va serverning ichki `127.0.0.1:8081` portiga uzatadi. Bu development server emas; frontendning Nginx konteyneriga yopiq ingress portidir. Frontend konteynerining ichki porti `80`. Backend/database portlarini internetga ochmang. Refresh cookie productionda Secure va HttpOnly bo'ladi.
+Caddy `80` va `443` portlarida so'rovlarni qabul qilib, frontend konteynerining ichki `80` portiga uzatadi. Frontend `/api-proxy` so'rovlarini backendga uzatadi. Backend va PostgreSQL portlarini internetga ochmang. Refresh cookie productionda Secure va HttpOnly bo'ladi.
 
 Frontend API manzili `/api-proxy`; alohida frontend API domenini kiritish shart emas.
 
-```bash
-docker compose ps
-curl --fail https://SIZNING-DOMENINGIZ/api-proxy/health/ready
-```
-
 Readiness database ulanishi va Alembic revisionni tekshiradi. Konteynerlar `unless-stopped` restart policy bilan ishlaydi. Ishonchli proxy IP sozlanmaguncha limiter bitta proxy ortidagi so'rovlarni umumiy IP sifatida hisoblaydi.
 
-## Mavjud database upgrade
+## Ma'lumot siyosati
 
-Avval tekshirilgan backup oling. Alembic versiyasi yo'q eski bazani `0001` migration bilan schema darajasida solishtiring. Faqat to'liq mos bo'lsa `alembic stamp 0001`, keyin `alembic upgrade head` bajaring. Noma'lum bazani stamp qilmang va PostgreSQL volumeni o'chirmang.
+Eski serverdagi database yoki foydalanuvchi ma'lumotlarini import qilmang. Joriy server alohida yangi PostgreSQL volume, yangi parollar va yangi admin bilan ishlaydi. `.env` yoki secretlarni serverlar orasida ko'chirmang.
 
-`0002` noto'g'ri tenant/role qiymatlarida xato bilan to'xtaydi. Eski naive timestamp qiymatlari UTC deb qabul qilinadi, Float pul qiymatlari ikki kasrli Numericga o'tadi. Real ma'lumotlarda vaqt va pul natijalarini solishtiring.
+Alembic faqat joriy server bazasining schema versiyasini boshqaradi. Noma'lum database'ga `alembic stamp` ishlatmang.
 
 ## Backup va rollback
 
-Har kuni PostgreSQL `pg_dump -Fc` backup oling, shifrlangan holda boshqa storagega saqlang. Parolni CLI argumentga yozmang; himoyalangan credential fayli yoki secret injection ishlating. `pg_restore`ni alohida databasega sinab, tenant yozuvlari va balanslarni tekshiring. Release oldidan image versiyasi va mos backupni saqlang. `0002` forward-only; rollback tekshirilgan backup yoki PITR rejasini talab qiladi.
+Har kuni faqat joriy serverdagi PostgreSQL bazasidan `pg_dump -Fc` backup oling va shifrlangan storage'da saqlang. Parolni CLI argumentga yozmang. Restore sinovini alohida vaqtinchalik database'da bajaring; eski server backupini joriy production bazasiga tiklamang.
 
 ## Tekshiruv chegarasi
 
-Compose sintaksisi va frontend build tekshiriladi; haqiqiy serverdagi Nginx/TLS, konteyner startup va PostgreSQL migratsiyasi hali tekshirilmagan. Redis/worker servislar hali yozilmagan. To'liq release to'siqlari `REMAINING_ISSUES.md`da.
+Joriy serverda Caddy/TLS, konteynerlar va PostgreSQL migratsiyasini alohida tekshirish kerak. Redis/worker servislar hali yozilmagan.

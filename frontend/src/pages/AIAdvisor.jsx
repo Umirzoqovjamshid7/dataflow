@@ -1,14 +1,6 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {request} from "../api";
 
-const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
-const demoSummary = {spend: 12480, impressions: 124800, clicks: 5980, leads: 384, qualified: 216, sales: 42, cpl: 32.5, ctr: 4.8, roas: 3.6};
-const demoCampaigns = [
-  {name: "Summer Launch", spend: 4200, leads: 142, cpl: 29.58, ctr: 5.2, roas: 4.1},
-  {name: "Retargeting", spend: 3180, leads: 118, cpl: 26.95, ctr: 6.1, roas: 3.8},
-  {name: "Brand Awareness", spend: 5100, leads: 124, cpl: 41.13, ctr: 3.4, roas: 2.9}
-];
-
 function money(value) { return `$${Number(value || 0).toLocaleString(undefined, {maximumFractionDigits: 2})}`; }
 function severityClass(severity) { return severity === "good" ? "advisor-good" : severity === "warning" ? "advisor-warning" : "advisor-info"; }
 
@@ -21,7 +13,6 @@ export default function AIAdvisor({role, t}) {
 
   useEffect(() => {
     if (!canUse) { setLoading(false); return; }
-    if (DEMO_MODE) { setSummary(demoSummary); setCampaigns(demoCampaigns); setLoading(false); return; }
     Promise.all([request("/api/analytics/summary"), request("/api/analytics/campaigns")])
       .then(([nextSummary, nextCampaigns]) => { setSummary(nextSummary); setCampaigns(nextCampaigns); })
       .catch((e) => setError(e.message))
@@ -29,7 +20,7 @@ export default function AIAdvisor({role, t}) {
   }, [canUse]);
 
   const recommendations = useMemo(() => {
-    if (!summary) return [];
+    if (!summary || ![summary.spend, summary.impressions, summary.leads, summary.sales].some(value => Number(value || 0) > 0)) return [];
     const spend = Number(summary.spend || 0), leads = Number(summary.leads || 0), cpl = Number(summary.cpl || 0);
     const ctr = Number(summary.ctr || 0), roas = Number(summary.roas || 0);
     const best = [...campaigns].sort((a, b) => Number(b.roas || 0) - Number(a.roas || 0))[0];
@@ -48,7 +39,7 @@ export default function AIAdvisor({role, t}) {
   if (!canUse) return <section className="panel advisor-empty"><h1>{t.aiTitle}</h1><p>{t.aiRestricted}</p></section>;
   if (loading) return <section className="panel" role="status">{t.loading}</section>;
   if (error) return <section className="panel error" role="alert">{error}</section>;
-  if (!summary) return <section className="panel advisor-empty"><h1>{t.aiTitle}</h1><p>{t.aiNoData}</p></section>;
+  if (!summary || !recommendations.length) return <section className="panel advisor-empty"><h1>{t.aiTitle}</h1><p>{t.aiNoData}</p></section>;
 
   return <div className="advisor-page">
     <div className="page-head"><div><h1>{t.aiTitle}</h1><p>{t.aiSubtitle}</p></div><span className="advisor-live">{t.aiBasedOn}</span></div>

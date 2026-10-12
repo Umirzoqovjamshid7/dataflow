@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from datetime import date, datetime, time, timezone
+from calendar import monthrange
+from datetime import date, datetime, time, timedelta, timezone
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import Literal
 from collections import defaultdict
@@ -14,6 +15,80 @@ from app.schemas.schemas import TenantCreate, CampaignCreate
 from app.api.deps import super_admin, require_roles
 
 router = APIRouter(prefix="/api", tags=["admin"])
+
+def _bounded_period(from_date: date | None, to_date: date | None):
+    today = datetime.now(timezone.utc).date()
+    if not from_date and not to_date:
+        return None
+    start = from_date or to_date
+    end = min(to_date or today, today)
+    if start > end:
+        raise HTTPException(422, "Boshlanish sanasi tugash sanasidan keyin bo'lishi mumkin emas")
+
+    is_current_month = start.day == 1 and start.year == today.year and start.month == today.month and end == today
+    is_full_month = start.day == 1 and end.day == monthrange(end.year, end.month)[1] and (start.year, start.month) == (end.year, end.month)
+    if is_current_month or is_full_month:
+        previous_month_end = start - timedelta(days=1)
+        previous_start = previous_month_end.replace(day=1)
+        matching_day = min(end.day, monthrange(previous_start.year, previous_start.month)[1])
+        previous_end = previous_start.replace(day=matching_day) if is_current_month else previous_month_end
+        label = "O'tgan oyning mos davriga nisbatan" if is_current_month else "O'tgan oyga nisbatan"
+    else:
+        duration = end - start
+        previous_end = start - timedelta(days=1)
+        previous_start = previous_end - duration
+        label = "Oldingi teng davrga nisbatan"
+    return start, end, previous_start, previous_end, label
+
+def _apply_campaign_filters(query, user, start=None, end=None, platform=None, campaign=None):
+    if user.role != "super_admin":
+        query = query.filter(Campaign.tenant_id == user.tenant_id)
+    if start:
+        query = query.filter(Campaign.date >= datetime.combine(start, time.min, tzinfo=timezone.utc))
+    if end:
+        query = query.filter(Campaign.date <= datetime.combine(end, time.max, tzinfo=timezone.utc))
+    if platform:
+        query = query.filter(func.lower(Campaign.platform) == platform.lower())
+    if campaign:
+        query = query.filter(Campaign.id == campaign)
+    return query
+
+def _apply_lead_filters(query, user, start=None, end=None, platform=None, campaign_name=None):
+    if user.role != "super_admin":
+        query = query.filter(Lead.tenant_id == user.tenant_id)
+    if start:
+        query = query.filter(Lead.created_at >= datetime.combine(start, time.min, tzinfo=timezone.utc))
+    if end:
+        query = query.filter(Lead.created_at <= datetime.combine(end, time.max, tzinfo=timezone.utc))
+    if platform:
+        query = query.filter(func.lower(Lead.source) == platform.lower())
+    if campaign_name:
+        query = query.filter(Lead.campaign_name == campaign_name)
+    return query
+
+def _analytics_values(campaigns, lead_query):
+    spend = sum((x.spend for x in campaigns), start=0)
+    impressions = sum(x.impressions or 0 for x in campaigns)
+    clicks = sum(x.clicks or 0 for x in campaigns)
+    campaign_leads = sum(x.leads or 0 for x in campaigns)
+    lead_count = lead_query.count()
+    tracked_leads = campaign_leads or lead_count
+    sales = sum(x.sales or 0 for x in campaigns)
+    revenue = sum((x.revenue for x in campaigns), start=0)
+    qualified = lead_query.filter(Lead.status.in_(["QUALIFIED", "qualified", "MEETING", "meeting"])).count()
+    return {
+        "spend": round(spend, 2),
+        "impressions": impressions,
+        "clicks": clicks,
+        "leads": tracked_leads,
+        "sales": sales,
+        "qualified": qualified,
+        "revenue": round(revenue, 2),
+        "ctr": round(clicks / impressions * 100, 2) if impressions else 0,
+        "cpc": round(spend / clicks, 2) if clicks else 0,
+        "cpl": round(spend / tracked_leads, 2) if tracked_leads else 0,
+        "roas": round(revenue / spend, 2) if spend else 0,
+    }
 
 @router.get("/admin/summary")
 def admin_summary(actor=Depends(super_admin), db: Session = Depends(get_db)):
@@ -140,70 +215,54 @@ def create_campaign(data: CampaignCreate, _: object = Depends(super_admin), db: 
 
 @router.get("/analytics/summary")
 def analytics_summary(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
-    q = db.query(Campaign)
-    lq = db.query(Lead)
-    if user.role != "super_admin":
-        q = q.filter(Campaign.tenant_id == user.tenant_id)
-        lq = lq.filter(Lead.tenant_id == user.tenant_id)
-    if from_date:
-        q = q.filter(Campaign.date >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
-        lq = lq.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
-    if to_date:
-        end = datetime.combine(to_date, time.max, tzinfo=timezone.utc)
-        q = q.filter(Campaign.date <= end)
-        lq = lq.filter(Lead.created_at <= end)
-    if platform:
-        q = q.filter(Campaign.platform == platform)
-    if campaign:
-        q = q.filter(Campaign.id == campaign)
-
+    period = _bounded_period(from_date, to_date)
+    start, end = (period[0], period[1]) if period else (None, None)
+    selected_campaign = _apply_campaign_filters(db.query(Campaign), user, campaign=campaign).first() if campaign else None
+    campaign_name = selected_campaign.name if selected_campaign else None
+    q = _apply_campaign_filters(db.query(Campaign), user, start, end, platform, campaign)
+    lq = _apply_lead_filters(db.query(Lead), user, start, end, platform, campaign_name)
     campaigns = q.all()
-    lead_count = lq.count()
-
-    spend = sum(x.spend for x in campaigns)
-    impressions = sum(x.impressions for x in campaigns)
-    clicks = sum(x.clicks for x in campaigns)
-    tracked_leads = sum(x.leads for x in campaigns) or lead_count
-    sales = sum(x.sales for x in campaigns)
-    revenue = sum(x.revenue for x in campaigns)
-    daily = defaultdict(lambda: {"views": 0, "clicks": 0})
+    values = _analytics_values(campaigns, lq)
+    daily = defaultdict(lambda: {"impressions": 0, "clicks": 0, "leads": 0, "spend": 0, "sales": 0})
     for item in campaigns:
         day = item.date.date().isoformat() if item.date else "unknown"
-        daily[day]["views"] += item.impressions or 0
+        daily[day]["impressions"] += item.impressions or 0
         daily[day]["clicks"] += item.clicks or 0
+        daily[day]["leads"] += item.leads or 0
+        daily[day]["spend"] += float(item.spend or 0)
+        daily[day]["sales"] += item.sales or 0
     daily_activity = [
-        {"date": day, **values, "ctr": round(values["clicks"] / values["views"] * 100, 2) if values["views"] else 0}
-        for day, values in sorted(daily.items())
+        {
+            "date": day,
+            **day_values,
+            "ctr": round(day_values["clicks"] / day_values["impressions"] * 100, 2) if day_values["impressions"] else 0,
+            "cpl": round(day_values["spend"] / day_values["leads"], 2) if day_values["leads"] else 0,
+        }
+        for day, day_values in sorted(daily.items())
     ]
+    previous = None
+    comparison_label = "Taqqoslash uchun ma'lumot yo'q"
+    if period:
+        previous_q = _apply_campaign_filters(db.query(Campaign), user, period[2], period[3], platform, campaign)
+        previous_lq = _apply_lead_filters(db.query(Lead), user, period[2], period[3], platform, campaign_name)
+        previous = _analytics_values(previous_q.all(), previous_lq)
+        comparison_label = period[4]
 
     return {
-        "spend": round(spend, 2),
-        "impressions": impressions,
-        "clicks": clicks,
-        "leads": tracked_leads,
-        "sales": sales,
-        "qualified": lq.filter(Lead.status.in_(["QUALIFIED", "qualified", "MEETING", "meeting"])).count(),
-        "revenue": round(revenue, 2),
-        "ctr": round(clicks / impressions * 100, 2) if impressions else 0,
-        "cpc": round(spend / clicks, 2) if clicks else 0,
-        "cpl": round(spend / tracked_leads, 2) if tracked_leads else 0,
-        "roas": round(revenue / spend, 2) if spend else 0,
+        **values,
         "daily_activity": daily_activity,
+        "previous": previous,
+        "comparison_label": comparison_label,
+        "period": {"from": start, "to": end} if period else None,
+        "previous_period": {"from": period[2], "to": period[3]} if period else None,
+        "attribution": {"crm_to_campaign": False, "note": "CRM va reklama kampaniyasi orasidagi bog'lanish tasdiqlanmagan"},
     }
 
 @router.get("/analytics/campaigns")
 def analytics_campaigns(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
-    q = db.query(Campaign)
-    if user.role != "super_admin":
-        q = q.filter(Campaign.tenant_id == user.tenant_id)
-    if from_date:
-        q = q.filter(Campaign.date >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
-    if to_date:
-        q = q.filter(Campaign.date <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))
-    if platform:
-        q = q.filter(Campaign.platform == platform)
-    if campaign:
-        q = q.filter(Campaign.id == campaign)
+    period = _bounded_period(from_date, to_date)
+    start, end = (period[0], period[1]) if period else (None, None)
+    q = _apply_campaign_filters(db.query(Campaign), user, start, end, platform, campaign)
     rows = q.order_by(Campaign.date.desc()).limit(200).all()
     result = []
     for x in rows:

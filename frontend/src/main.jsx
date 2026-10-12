@@ -9,7 +9,6 @@ const Admin = lazy(() => import("./pages/Admin"));
 const Team = lazy(() => import("./pages/Team"));
 const Settings = lazy(() => import("./pages/Settings"));
 const AIAdvisor = lazy(() => import("./pages/AIAdvisor"));
-const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
 
 function Login({onLogin, t}) {
   const [email, setEmail] = useState("");
@@ -62,7 +61,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(() => pageFromPath(window.location.pathname));
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 700);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") !== "light");
   const [language, setLanguage] = useState(() => localStorage.getItem("language") || "uz");
   const t = translations[language] || translations.uz;
 
@@ -80,11 +79,6 @@ function App() {
   const role = user?.role;
   const visiblePage = page === "admin" && role !== "super_admin" ? "dashboard" : page === "team" && role !== "tenant_admin" ? "dashboard" : page;
   useEffect(() => {
-    if (DEMO_MODE) {
-      setUser({role: "tenant_admin", tenant_id: 1, full_name: "Demo User"});
-      setLoading(false);
-      return;
-    }
     restoreSession().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
     const expired = () => setUser(null);
     const popstate = () => setPage(pageFromPath(window.location.pathname));
@@ -100,17 +94,17 @@ function App() {
   if (!user) return <Login t={t} onLogin={data => {setUser(data); navigate("dashboard");}} />;
 
   return <div className={`shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-    <button className="menu-toggle" aria-label="Toggle navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? "‹" : "☰"}</button>
-    {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+    <button className="menu-toggle" aria-label="Navigatsiyani ochish yoki yopish" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(open => !open)}>{sidebarOpen ? "‹" : "☰"}</button>
+    {sidebarOpen && <button className="sidebar-overlay" aria-label="Navigatsiyani yopish" onClick={() => setSidebarOpen(false)} />}
     <aside>
       <div className="brand"><BrandMark /><strong>DataFlow</strong></div>
-      <a href="/dashboard" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);}}>{t.dashboard}</a>
-      {role === "super_admin" && <a href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>{t.superAdmin}</a>}
-      {role === "tenant_admin" && <a href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>{t.team}</a>}
-      <a href="/settings" onClick={e => {e.preventDefault(); navigate("settings"); setSidebarOpen(false);}}>{t.settings}</a>
-      <a href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>{t.aiNav}</a>
+      <a className={visiblePage === "dashboard" ? "active" : ""} aria-current={visiblePage === "dashboard" ? "page" : undefined} href="/dashboard" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);}}>Marketing tahlili</a>
+      <a href="/dashboard#campaigns" onClick={e => {e.preventDefault(); navigate("dashboard"); setSidebarOpen(false);setTimeout(() => document.getElementById("campaigns")?.scrollIntoView({behavior:"smooth"}), 50)}}>Kampaniyalar</a>
+      {role === "super_admin" && <a className={visiblePage === "admin" ? "active" : ""} href="/admin" onClick={e => {e.preventDefault(); navigate("admin"); setSidebarOpen(false);}}>Umumiy tahlil</a>}
+      {role === "tenant_admin" && <a className={visiblePage === "team" ? "active" : ""} href="/team" onClick={e => {e.preventDefault(); navigate("team"); setSidebarOpen(false);}}>Jamoa</a>}
+      <a className={visiblePage === "ai" ? "active" : ""} href="/ai-advisor" onClick={e => {e.preventDefault(); navigate("ai"); setSidebarOpen(false);}}>AI tahlil</a>
+      <a className={visiblePage === "settings" ? "active" : ""} href="/settings" onClick={e => {e.preventDefault(); navigate("settings"); setSidebarOpen(false);}}>Integratsiyalar va sozlamalar</a>
       <button onClick={async ()=>{
-        if (DEMO_MODE) return;
         try { await request("/api/auth/logout", {method: "POST"}); }
         finally { setToken(null); setUser(null); }
       }}>{t.logout}</button>
