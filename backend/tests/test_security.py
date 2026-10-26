@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
-from app.models.models import Tenant, User
+from app.models.models import Lead, Tenant, User
 from app.core.config import Settings
 from app.core.security import hash_password, verify_password
 
@@ -13,9 +13,12 @@ def test_tenant_cannot_read_other_lead(fixture):
         assert [row["id"] for row in rows] == [ids["own"]]
 
 @pytest.mark.parametrize("role", ["marketer", "analyst"])
-def test_readonly_analytics_roles_cannot_read_pii(fixture, role):
-    client, _, tokens, _ = fixture
-    assert client.get("/api/leads", headers=tokens[role]).status_code == 403
+def test_analytics_roles_read_only_tenant_lead_list(fixture, role):
+    client, _, tokens, ids = fixture
+    response = client.get("/api/leads", headers=tokens[role])
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [ids["own"]]
+    assert client.get(f"/api/leads/{ids['own']}", headers=tokens[role]).status_code == 403
     assert client.get("/api/analytics/summary", headers=tokens[role]).status_code == 200
     assert client.get("/api/admin/tenants", headers=tokens[role]).status_code == 403
 
@@ -62,6 +65,17 @@ def test_public_lead_idempotency(fixture):
     assert second.status_code == 200
     assert second.json()["duplicate"] is True
     assert second.json()["lead_id"] == first.json()["lead_id"]
+
+
+def test_model_metadata_enforces_lead_idempotency(fixture):
+    _, factory, _, ids = fixture
+    with factory() as db:
+        db.add_all([
+            Lead(tenant_id=ids["a"], name="One", phone="+998901111111", idempotency_key="same-key"),
+            Lead(tenant_id=ids["a"], name="Two", phone="+998902222222", idempotency_key="same-key"),
+        ])
+        with pytest.raises(IntegrityError):
+            db.commit()
 
 def test_password_hash_and_secret_policy():
     hashed = hash_password("test-password")

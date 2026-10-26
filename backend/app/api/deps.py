@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import decode_token
 from app.models.models import User, Tenant
-from jose import JWTError
+from jwt.exceptions import InvalidTokenError
 
 bearer = HTTPBearer()
 
@@ -26,7 +26,7 @@ def current_user(
         if user.role not in ROLES:
             raise HTTPException(403, "Unknown role")
         return user
-    except (JWTError, ValueError, KeyError, TypeError):
+    except (InvalidTokenError, ValueError, KeyError, TypeError):
         raise HTTPException(401, "Invalid token")
 
 ROLES = {"super_admin", "tenant_admin", "marketer", "sales_manager", "analyst"}

@@ -15,6 +15,8 @@ from app.schemas.schemas import LoginIn
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
+SESSION_TTL = timedelta(minutes=15)
+REMEMBER_TTL = timedelta(hours=24)
 
 @router.post("/login")
 def login(data: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
@@ -34,7 +36,7 @@ def login(data: LoginIn, request: Request, response: Response, db: Session = Dep
             audit(db, request, "failed_login", user)
             db.commit()
             raise HTTPException(401, "Invalid credentials")
-    issue_refresh(db, response, user)
+    issue_refresh(db, response, user, persistent=data.remember_me)
     audit(db, request, "login", user)
     db.commit()
     return token_response(user)
@@ -47,10 +49,31 @@ def token_response(user):
         "full_name": user.full_name,
     }
 
-def issue_refresh(db, response, user):
+def issue_refresh(db, response, user, *, persistent=False, expires_at=None):
+    now = datetime.now(timezone.utc)
+    expires_at = expires_at or now + (REMEMBER_TTL if persistent else SESSION_TTL)
+    if expires_at.tzinfo is None:  # SQLite test/dev drivers can return naive datetimes.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     raw = secrets.token_urlsafe(48)
-    db.add(RefreshSession(user_id=user.id, tenant_id=user.tenant_id, token_hash=hashlib.sha256(raw.encode()).hexdigest(), expires_at=datetime.now(timezone.utc) + timedelta(days=7)))
-    response.set_cookie("refresh_token", raw, httponly=True, secure=settings.ENVIRONMENT == "production", samesite="strict", max_age=604800, path="/api/auth")
+    db.add(RefreshSession(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        expires_at=expires_at,
+        persistent=persistent,
+    ))
+    cookie = {
+        "key": "refresh_token",
+        "value": raw,
+        "httponly": True,
+        "secure": settings.ENVIRONMENT == "production",
+        "samesite": "strict",
+        "path": "/api/auth",
+    }
+    if persistent:
+        cookie["max_age"] = max(0, int((expires_at - now).total_seconds()))
+        cookie["expires"] = expires_at
+    response.set_cookie(**cookie)
 
 def trusted_origin(request):
     origin = request.headers.get("origin")
@@ -75,13 +98,16 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     if not user or not user.active or (user.role != "super_admin" and (not tenant or not tenant.active)):
         db.commit()
         raise HTTPException(401, "Session disabled")
-    issue_refresh(db, response, user)
+    # Rotate the secret while preserving the original absolute expiry. A refresh
+    # therefore never turns a 24-hour login into a sliding session.
+    issue_refresh(db, response, user, persistent=session.persistent, expires_at=session.expires_at)
     db.commit()
     return token_response(user)
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     trusted_origin(request)
+    limit(db, request, "logout", maximum=30)
     digest = hashlib.sha256(request.cookies.get("refresh_token", "").encode()).hexdigest()
     db.execute(update(RefreshSession).where(RefreshSession.token_hash == digest).values(revoked=True))
     db.commit()

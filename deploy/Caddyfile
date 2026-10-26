@@ -1,0 +1,51 @@
+vakansiya.192-255-242-92.sslip.io {
+	encode zstd gzip
+	reverse_proxy vakansiya-web:8000
+}
+
+pixelinbox.192-255-242-92.sslip.io {
+	encode zstd gzip
+	reverse_proxy 172.19.0.1:4174
+}
+
+pixelinbox.uz, www.pixelinbox.uz {
+	encode zstd gzip
+	@crm_return {
+		path /
+		query crm_connected=1
+	}
+	@instagram_return {
+		path /
+		query instagram_connected=1
+	}
+	@instagram_cancel {
+		path /
+		query instagram_error=cancelled
+	}
+	route {
+		# Preserve the application's existing OAuth return pages before the public homepage.
+		reverse_proxy @crm_return 172.19.0.1:4174
+		reverse_proxy @instagram_return 172.19.0.1:4174
+		reverse_proxy @instagram_cancel 172.19.0.1:4174
+		reverse_proxy /sfs-license/* sfs-license:4187
+		redir /inbox/ /inbox 308
+		redir /widgets/instagram/ /widgets/instagram 308
+		redir /widgets/secret-stage-fields/ /widgets/secret-stage-fields 308
+		rewrite / /site/index.html
+		rewrite /widgets/instagram /site/instagram.html
+		rewrite /widgets/secret-stage-fields /site/secret-stage-fields.html
+		rewrite /inbox /index.html
+		header /site/*.png >Content-Type image/png
+		reverse_proxy 172.19.0.1:4174
+	}
+}
+
+novaagents.pixelinbox.uz {
+	encode zstd gzip
+	reverse_proxy nova-api:8765
+}
+
+n8n.192-255-242-92.sslip.io {
+	encode zstd gzip
+	reverse_proxy n8n-automation:5678
+}

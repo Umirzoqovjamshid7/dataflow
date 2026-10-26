@@ -28,7 +28,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Ruxsat |
 |---|---|---|
 | POST | `/api/leads/public` | Ochiq, faol tenant slug kerak |
-| GET | `/api/leads` | `tenant_admin`, `sales_manager` |
+| GET | `/api/leads` | Barcha authenticated rollar, tenant-scoped |
 | GET | `/api/leads/{lead_id}` | `tenant_admin`, `sales_manager` |
 
 Public lead uchun minimal body:
@@ -61,6 +61,19 @@ Analytics:
 - `GET /api/analytics/campaigns`
 
 Analytics qiymatlari hozircha legacy campaign aggregate ma'lumotlariga asoslanadi; ular verified financial reporting sifatida ishlatilmasin.
+
+## Real integratsiyalar
+
+- `POST /api/admin/workspace` — super admin bir martalik kompaniya va tenant admin yaratadi.
+- `GET /api/integrations/bitrix/status` — maxfiy webhookni chiqarmasdan ulanish holati.
+- `POST /api/integrations/bitrix/probe` — webhookni tekshirish va voronkalarni olish.
+- `PUT /api/integrations/bitrix` — webhook va voronkani shifrlab saqlash.
+- `POST /api/integrations/bitrix/sync` — Bitrix bitimlarini qo‘lda sinxronlash.
+- `GET /api/pbx/status`, `PUT /api/pbx` — OnlinePBX ulanish holati va sozlamasi.
+- `GET /api/pbx?from=YYYY-MM-DD&to=YYYY-MM-DD` — real qo‘ng‘iroqlar hisoboti.
+- `GET /api/plan-fact`, `PUT /api/plan-fact` — hisobot va oylik reja.
+- `GET /api/plan-fact/template`, `POST /api/plan-fact/import` — Excel namuna va loyiha rejalarini `.xlsx` orqali yuklash.
+- `GET /api/integrations/databases/{postgresql|mssql}/status`, `PUT /api/integrations/databases/{postgresql|mssql}` — tashqi database ulanishini tekshirish va shifrlab saqlash.
 
 ## Health-check
 

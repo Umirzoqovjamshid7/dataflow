@@ -8,6 +8,10 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.leads import router as leads_router
 from app.api.admin import router as admin_router
+from app.api.pbx import router as pbx_router
+from app.api.plan_fact import router as plan_fact_router
+from app.api.bitrix import router as bitrix_router
+from app.api.databases import router as databases_router
 
 app = FastAPI(
     title="LeadFlow SaaS API",
@@ -21,13 +25,17 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.CORS_ORIGINS.split(",")],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 
 app.include_router(auth_router)
 app.include_router(leads_router)
 app.include_router(admin_router)
+app.include_router(pbx_router)
+app.include_router(plan_fact_router)
+app.include_router(bitrix_router)
+app.include_router(databases_router)
 
 @app.get("/")
 def root():
@@ -38,7 +46,7 @@ def ready():
     try:
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if revision not in {"0004", "0005"}:
+        if revision != "0008":
             return JSONResponse({"status": "migration_required"}, status_code=503)
     except SQLAlchemyError:
         return JSONResponse({"status": "database_unavailable"}, status_code=503)

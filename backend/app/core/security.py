@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+import jwt
 from passlib.context import CryptContext
 from pwdlib import PasswordHash
 from .config import settings
@@ -30,4 +30,11 @@ def create_token(user_id: int, role: str, tenant_id: int | None):
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 def decode_token(token: str):
-    return jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"], audience="leadflow-api", issuer="leadflow", options={"require_exp": True, "require_sub": True})
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET,
+        algorithms=["HS256"],
+        audience="leadflow-api",
+        issuer="leadflow",
+        options={"require": ["exp", "sub", "iss", "aud", "type"]},
+    )

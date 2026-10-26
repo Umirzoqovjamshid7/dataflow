@@ -14,15 +14,15 @@ Tenant business access uses `tenant_query` for leads and explicit tenant predica
 |---|---|---|---|---|
 | super_admin | all | all | all tenants | manage |
 | tenant_admin | own | own | own | denied |
-| marketer | own | denied | denied | denied |
-| sales_manager | denied | own | denied | denied |
-| analyst | own, read only | denied | denied | denied |
+| marketer | own | own, read only | denied | denied |
+| sales_manager | own | own | denied | denied |
+| analyst | own, read only | own, read only | denied | denied |
 
 Shared rate-limit counters use atomic database upserts. Login is limited to 10 requests/minute/IP, public lead capture to 30, refresh to 30. These are infrastructure counters, not tenant business objects. Audit events are persisted in the same transaction as company/user mutations.
 
 ## Existing domain limitations
 
-Campaign rows still contain legacy aggregate metrics; there is no daily insight fact table, ad hierarchy or sale attribution yet. Existing analytics endpoints are retained but are not certified financial reporting. Integration service files are inherited prototypes and are not connected production workflows.
+Campaign rows still contain legacy aggregate metrics; there is no daily ad insight fact table or ad hierarchy yet. Bitrix24 incoming-webhook credentials, OnlinePBX API credentials and external database credentials are encrypted at rest. Bitrix deals are manually synchronized into tenant-scoped leads; OnlinePBX call history is queried live for the selected period. Plan/Fakt stores monthly and project-level targets and supports validated XLSX imports. PostgreSQL and MS SQL perform a real encrypted connection test; business table/column mapping is not implemented yet. Provider polling workers, inbound event webhooks, automatic retries and key rotation are not implemented yet.
 
 ## Required next architecture
 

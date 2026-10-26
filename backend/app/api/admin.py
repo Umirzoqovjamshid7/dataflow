@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.models import Tenant, User, Campaign, Lead
 from app.schemas.schemas import TenantCreate, CampaignCreate
-from app.api.deps import super_admin, require_roles
+from app.api.deps import current_user, super_admin, require_roles
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -70,6 +70,30 @@ class UserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=180)
     password: str = Field(min_length=14, max_length=128)
     role: Literal["tenant_admin", "marketer", "sales_manager", "analyst"]
+
+class WorkspaceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    company_name: str = Field(min_length=1, max_length=180)
+    slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=100)
+    email: EmailStr
+    full_name: str = Field(min_length=1, max_length=180)
+    password: str = Field(min_length=14, max_length=128)
+
+@router.post("/admin/workspace", status_code=201)
+def create_workspace(data: WorkspaceCreate, request: Request, actor=Depends(super_admin), db: Session = Depends(get_db)):
+    tenant = Tenant(name=data.company_name, slug=data.slug)
+    db.add(tenant)
+    try:
+        db.flush()
+        user = User(tenant_id=tenant.id, email=str(data.email).lower(), full_name=data.full_name, role="tenant_admin", password_hash=hash_password(data.password))
+        db.add(user)
+        db.flush()
+        audit(db, request, "workspace_creation", actor, f"tenant:{tenant.id}", tenant.id)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Kompaniya, slug yoki email oldin ro‘yxatdan o‘tgan")
+    return {"tenant_id": tenant.id, "email": user.email}
 
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -139,7 +163,7 @@ def create_campaign(data: CampaignCreate, _: object = Depends(super_admin), db: 
     return row
 
 @router.get("/analytics/summary")
-def analytics_summary(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
+def analytics_summary(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(current_user), db: Session = Depends(get_db)):
     q = db.query(Campaign)
     lq = db.query(Lead)
     if user.role != "super_admin":
@@ -164,8 +188,9 @@ def analytics_summary(from_date: date | None = Query(default=None, alias="from")
     impressions = sum(x.impressions for x in campaigns)
     clicks = sum(x.clicks for x in campaigns)
     tracked_leads = sum(x.leads for x in campaigns) or lead_count
-    sales = sum(x.sales for x in campaigns)
-    revenue = sum(x.revenue for x in campaigns)
+    won_leads = lq.filter(Lead.status.in_(["WON", "won", "PAID", "paid", "SOLD", "sold", "SUCCESS", "success"])).all()
+    sales = sum(x.sales for x in campaigns) + sum(1 for lead in won_leads if lead.crm == "bitrix")
+    revenue = sum(x.revenue for x in campaigns) + sum((lead.amount or 0 for lead in won_leads if lead.crm == "bitrix"), 0)
     daily = defaultdict(lambda: {"views": 0, "clicks": 0})
     for item in campaigns:
         day = item.date.date().isoformat() if item.date else "unknown"
@@ -192,7 +217,7 @@ def analytics_summary(from_date: date | None = Query(default=None, alias="from")
     }
 
 @router.get("/analytics/campaigns")
-def analytics_campaigns(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(require_roles("tenant_admin", "marketer", "analyst")), db: Session = Depends(get_db)):
+def analytics_campaigns(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, campaign: int | None = None, user=Depends(current_user), db: Session = Depends(get_db)):
     q = db.query(Campaign)
     if user.role != "super_admin":
         q = q.filter(Campaign.tenant_id == user.tenant_id)

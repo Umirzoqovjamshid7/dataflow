@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.models import Lead, Tenant
 from app.schemas.schemas import LeadCreate
-from app.api.deps import require_roles, tenant_query
+from app.api.deps import current_user, require_roles, tenant_query
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -58,7 +58,7 @@ def create_public_lead(
     return {"success": True, "lead_id": lead.id}
 
 @router.get("")
-def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, user=Depends(require_roles("tenant_admin", "sales_manager")), db: Session = Depends(get_db)):
+def list_leads(from_date: date | None = Query(default=None, alias="from"), to_date: date | None = Query(default=None, alias="to"), platform: str | None = None, user=Depends(current_user), db: Session = Depends(get_db)):
     q = tenant_query(db, Lead, user)
     if from_date: q = q.filter(Lead.created_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
     if to_date: q = q.filter(Lead.created_at <= datetime.combine(to_date, time.max, tzinfo=timezone.utc))

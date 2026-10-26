@@ -16,10 +16,8 @@ export function token() {
 }
 
 export async function request(path, options = {}, retry = true) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
+  const headers = {...(options.headers || {})};
+  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
   if (token()) headers.Authorization = `Bearer ${token()}`;
 
   const res = await fetch(API + path, {...options, headers, credentials: "include"});
@@ -29,9 +27,25 @@ export async function request(path, options = {}, retry = true) {
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${res.status})`);
+    const error = new Error(typeof data.detail === "string" ? data.detail : `Request failed (${res.status})`);
+    error.status = res.status;
+    error.code = data.code;
+    throw error;
   }
   return res.json();
+}
+
+export async function download(path) {
+  const headers = {};
+  if (token()) headers.Authorization = `Bearer ${token()}`;
+  let res = await fetch(API + path, {headers, credentials: "include"});
+  if (res.status === 401) {
+    await restoreSession();
+    headers.Authorization = `Bearer ${token()}`;
+    res = await fetch(API + path, {headers, credentials: "include"});
+  }
+  if (!res.ok) throw new Error(`Yuklab bo‘lmadi (${res.status})`);
+  return res.blob();
 }
 
 export { API };

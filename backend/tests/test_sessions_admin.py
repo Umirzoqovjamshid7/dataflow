@@ -1,6 +1,39 @@
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from fastapi import Response
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.core.db import Base
+from app.api.auth import issue_refresh
 from app.models.models import AuditLog, RefreshSession
 
 LOGIN = {"email": "tenant_admin@example.com", "password": "test-password-123"}
+
+
+def test_refresh_cookie_modes_and_absolute_expiry_without_http_client():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(engine)
+    user = SimpleNamespace(id=7, tenant_id=None)
+    with factory() as db:
+        session_response = Response()
+        issue_refresh(db, session_response, user)
+        db.commit()
+        browser_session = db.query(RefreshSession).one()
+        assert browser_session.persistent is False
+        assert "Max-Age" not in session_response.headers["set-cookie"]
+
+        fixed_expiry = datetime.now(timezone.utc) + timedelta(hours=24)
+        persistent_response = Response()
+        issue_refresh(db, persistent_response, user, persistent=True, expires_at=fixed_expiry)
+        db.commit()
+        remembered = db.query(RefreshSession).filter_by(persistent=True).one()
+        stored_expiry = remembered.expires_at.replace(tzinfo=timezone.utc) if remembered.expires_at.tzinfo is None else remembered.expires_at
+        assert stored_expiry == fixed_expiry
+        assert "Max-Age=86399" in persistent_response.headers["set-cookie"] or "Max-Age=86400" in persistent_response.headers["set-cookie"]
+        assert "HttpOnly" in persistent_response.headers["set-cookie"]
+        assert "SameSite=strict" in persistent_response.headers["set-cookie"]
+    engine.dispose()
 
 def test_refresh_rotation_logout_and_cookie(fixture):
     client, factory, _, _ = fixture
@@ -20,6 +53,40 @@ def test_refresh_rotation_logout_and_cookie(fixture):
     with factory() as db:
         assert db.query(AuditLog).filter_by(action="login").count() == 1
         assert all(s.token_hash not in (old, new) for s in db.query(RefreshSession))
+
+
+def test_remember_me_uses_fixed_24_hour_persistent_session(fixture):
+    client, factory, _, _ = fixture
+    before = datetime.now(timezone.utc)
+    login = client.post("/api/auth/login", json={**LOGIN, "remember_me": True})
+    assert login.status_code == 200
+    cookie = login.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie
+    assert "Max-Age=86400" in cookie
+
+    with factory() as db:
+        original = db.query(RefreshSession).filter_by(revoked=False).one()
+        original_expiry = original.expires_at.replace(tzinfo=timezone.utc) if original.expires_at.tzinfo is None else original.expires_at
+        assert original.persistent is True
+        assert before + timedelta(hours=23, minutes=59) <= original_expiry <= before + timedelta(hours=24, seconds=5)
+
+    assert client.post("/api/auth/refresh").status_code == 200
+    with factory() as db:
+        rotated = db.query(RefreshSession).filter_by(revoked=False).one()
+        rotated_expiry = rotated.expires_at.replace(tzinfo=timezone.utc) if rotated.expires_at.tzinfo is None else rotated.expires_at
+        assert rotated.persistent is True
+        assert rotated_expiry == original_expiry
+
+
+def test_default_login_uses_browser_session_cookie(fixture):
+    client, factory, _, _ = fixture
+    login = client.post("/api/auth/login", json=LOGIN)
+    assert login.status_code == 200
+    cookie = login.headers["set-cookie"]
+    assert "Max-Age" not in cookie and "expires=" not in cookie.lower()
+    with factory() as db:
+        session = db.query(RefreshSession).filter_by(revoked=False).one()
+        assert session.persistent is False
 
 def test_untrusted_origin_and_bruteforce_limit(fixture):
     client, _, _, _ = fixture
@@ -52,5 +119,5 @@ def test_last_admin_and_role_changes(fixture):
     url = f"/api/admin/tenants/{ids['a']}/users"
     assert client.patch(f"{url}/{admin_id}", json={"role": "analyst", "active": True}, headers=tokens["super_admin"]).status_code == 409
     assert client.patch(f"{url}/{analyst_id}", json={"role": "sales_manager", "active": True}, headers=tokens["tenant_admin"]).status_code == 200
-    assert client.get("/api/analytics/summary", headers=tokens["analyst"]).status_code == 403
+    assert client.get("/api/analytics/summary", headers=tokens["analyst"]).status_code == 200
     assert client.get("/api/leads", headers=tokens["analyst"]).status_code == 200

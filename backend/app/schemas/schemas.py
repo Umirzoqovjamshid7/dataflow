@@ -6,6 +6,7 @@ class LoginIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
     password: str = Field(min_length=1, max_length=1024)
+    remember_me: bool = False
 
 class TenantCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
